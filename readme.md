@@ -46,7 +46,7 @@ def call():
 
 ## 模型的整体结构
 
-![模型整体结构图片链接](https://blog.csdn.net/znevegiveup1/article/details/115283917)
+[模型整体结构图片链接](https://blog.csdn.net/znevegiveup1/article/details/115283917)
 
 ## Embeddings层的实现
 
@@ -176,11 +176,11 @@ context_layer = tf.reshape(context_layer,output_shape)
 
 **bert之中的Transformer结构只有encoder部分，没有decoder部分，对应的结构图如下：**
 
-![bert之中Transformer结构图片](https://blog.csdn.net/znevegiveup1/article/details/114585302)
+[bert之中Transformer结构图片](https://blog.csdn.net/znevegiveup1/article/details/114585302)
 
 为了更好地方便理解，我制作了一个更符号我的代码风格的机构图，对应内容如下：
 
-![代码中Transformer结构图](https://blog.csdn.net/znevegiveup1/article/details/115283985)
+[代码中Transformer结构图](https://blog.csdn.net/znevegiveup1/article/details/115283985)
 
 Transformer整体实现的结构如下：
 
