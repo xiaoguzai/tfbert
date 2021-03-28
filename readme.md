@@ -46,7 +46,7 @@ def call():
 
 ## 模型的整体结构
 
-![2021-03-28 10-30-30 的屏幕截图](https://github.com/boss2020/tfbert/blob/main/2021-03-28%2009-26-14%20%E7%9A%84%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE.png)
+![模型整体结构图片链接](https://blog.csdn.net/znevegiveup1/article/details/115283917)
 
 ## Embeddings层的实现
 
@@ -176,11 +176,11 @@ context_layer = tf.reshape(context_layer,output_shape)
 
 **bert之中的Transformer结构只有encoder部分，没有decoder部分，对应的结构图如下：**
 
-![2021-03-28 15-37-42 的屏幕截图](/home/xiaoguzai/图片/2021-03-28 15-37-42 的屏幕截图.png)
+![bert之中Transformer结构图片](https://blog.csdn.net/znevegiveup1/article/details/114585302)
 
 为了更好地方便理解，我制作了一个更符号我的代码风格的机构图，对应内容如下：
 
-![2021-03-28 15-53-39 的屏幕截图](/home/xiaoguzai/图片/2021-03-28 15-53-39 的屏幕截图.png)
+![代码中Transformer结构图](https://blog.csdn.net/znevegiveup1/article/details/115283985)
 
 Transformer整体实现的结构如下：
 
