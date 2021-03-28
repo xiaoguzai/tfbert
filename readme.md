@@ -46,7 +46,7 @@ def call():
 
 ## 模型的整体结构
 
-![2021-03-28 10-30-30 的屏幕截图](/home/xiaoguzai/图片/2021-03-28 10-30-30 的屏幕截图.png)
+![2021-03-28 10-30-30 的屏幕截图](https://github.com/boss2020/tfbert/blob/main/2021-03-28%2009-26-14%20%E7%9A%84%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE.png)
 
 ## Embeddings层的实现
 
