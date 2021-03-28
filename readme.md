@@ -21,6 +21,7 @@ https://github.com/google-research/bert
 ## example使用
 
 运行命令python example.py
+
 运行example.py所需的数据集
 链接: https://pan.baidu.com/s/1h5JVTePB4g_9jjzr5YrflA  密码: 7u4r
 
