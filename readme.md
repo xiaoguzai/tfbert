@@ -111,7 +111,6 @@ bert之中的Normalization使用的是LayerNormalization，对应的数学公式
 $$
 x = \frac{x-\mu}{\sqrt{(\sigma)^{2}+\epsilon}}
 $$
-
 ```python
 def build(self, input_shape):
     self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
