@@ -272,5 +272,5 @@ for ndx,(param_value,param) in enumerate(zip(param_values,bert_params)):
 ```python
 keras.backend.batch_set_value(weight_value_tuples)
 ```
-
-2021年3月31号：更新了loader之中的权重定义
+## 更新内容
+2021年3月31号：更新了loader之中的权重定义，以及对应的segment_ids有输入和没有输入的不同的实现
