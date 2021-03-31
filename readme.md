@@ -272,5 +272,20 @@ for ndx,(param_value,param) in enumerate(zip(param_values,bert_params)):
 ```python
 keras.backend.batch_set_value(weight_value_tuples)
 ```
+## 注意事项
+这里面的有一些参数尚未使用上去
+bert/pooler/dense/bias
+bert/pooler/dense/kernel
+cls/predictions/output_bias
+cls/predictions/transform/LayerNorm/beta
+cls/predictions/transform/LayerNorm/gamma
+cls/predictions/transform/dense/bias
+cls/predictions/transform/dense/kernel
+cls/seq_relationship/output_bias
+cls/seq_relationship/output_weights
+这是因为这里的参数是用于其他一些任务的，比如seq_relationship用于序列的关系，
+predictions权重用于句子的预测，pooler池化层也是用于nsp等任务的，分类任务这些
+权重内容暂时使用不上，所以分类任务暂时不需要这些权重的内容
+
 ## 更新内容
 2021年3月31号：更新了loader之中的权重定义，以及对应的segment_ids有输入和没有输入的不同的实现
