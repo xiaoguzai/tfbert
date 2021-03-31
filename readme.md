@@ -85,8 +85,8 @@ position_embeddings = tf.slice(self.position_embeddings_table,
                                [maxlen,-1])
 ```
 
-segment_embedding使用的是bert预训练的token_embedding，主要用于分割句子，第一句的标志为0，第二句的标志为1，第三句标志为0这样依次分割下去。目前这里的实现还是简易版本，标志为全零标志，日后还会进行进一步更新。
-
+segment_embedding使用：如果输入为一个[Input_ids,Segment_ids]构成的list数组，则分别放入word_embedding和segment_embedding之中
+如果输入的只有一个Input_ids的tensor内容，则默认使用segment_ids为全零的tensor，然后分别放入word_embedding和segment_embedding层之中
 ```python
 #build()
 self.segment_embeddings_layer = keras.layers.Embedding(
@@ -96,6 +96,13 @@ self.segment_embeddings_layer = keras.layers.Embedding(
     name = "segment_embeddings"
 )
 #call()
+segment_ids = None
+if isinstance(input_ids,list):
+    assert 2 == len(input_ids),"Expecting inputs to be a [input_ids,token_type_ids] list"
+    input_ids,segment_ids = input_ids[0],input_ids[1]
+if segment_ids == None:
+    segment_ids = tf.zeros_like(input_ids)
+word_embeddings = self.word_embeddings_layer(input_ids)
 segment_embeddings = self.segment_embeddings_layer(segment_ids)
 ```
 
@@ -216,262 +223,39 @@ param_values = keras.backend.batch_get_value(bert.weights)
 接下来使用一个字典将bert的权重内容对应到params参数内容之中
 
 ```python
-    transformer_dicts = {
-       'bert/embeddings/position_embeddings:0':'bert/embeddings/position_embeddings',
-       'bert/embeddings/word_embeddings/embeddings:0':'bert/embeddings/word_embeddings',
-       'bert/embeddings/segment_embeddings/embeddings:0':'bert/embeddings/token_type_embeddings',
-       'bert/embeddings/layer_normalization/gamma:0':'bert/embeddings/LayerNorm/gamma',
-       'bert/embeddings/layer_normalization/beta:0':'bert/embeddings/LayerNorm/beta',
-        #1
-       'bert/transformer/attention_layer/query/kernel:0':'bert/encoder/layer_0/attention/self/query/kernel',
-       'bert/transformer/attention_layer/query/bias:0':'bert/encoder/layer_0/attention/self/query/bias',
-       'bert/transformer/attention_layer/key/kernel:0':'bert/encoder/layer_0/attention/self/key/kernel',
-       'bert/transformer/attention_layer/key/bias:0':'bert/encoder/layer_0/attention/self/key/bias',
-       'bert/transformer/attention_layer/value/kernel:0':'bert/encoder/layer_0/attention/self/value/kernel',
-       'bert/transformer/attention_layer/value/bias:0':'bert/encoder/layer_0/attention/self/value/bias',
-        #...
-       'bert/transformer/dense0/kernel:0':'bert/encoder/layer_0/attention/output/dense/kernel',
-       'bert/transformer/dense0/bias:0':'bert/encoder/layer_0/attention/output/dense/bias',
-       'bert/transformer/layer_normalization_1/gamma:0':'bert/encoder/layer_0/attention/output/LayerNorm/gamma',
-       'bert/transformer/layer_normalization_1/beta:0':'bert/encoder/layer_0/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer/dense/kernel:0':'bert/encoder/layer_0/intermediate/dense/kernel',#未使用
-       'bert/transformer/dense/bias:0':'bert/encoder/layer_0/intermediate/dense/bias',#未使用
-        #...
-       'bert/transformer/dense1/kernel:0':'bert/encoder/layer_0/output/dense/kernel',#未使用
-       'bert/transformer/dense1/bias:0':'bert/encoder/layer_0/output/dense/bias',
-       'bert/transformer/layer_normalization_2/gamma:0':'bert/encoder/layer_0/output/LayerNorm/gamma',
-       'bert/transformer/layer_normalization_2/beta:0':'bert/encoder/layer_0/output/LayerNorm/beta',
-        #...
-        #2
-       'bert/transformer_1/attention_layer_1/query/kernel:0':'bert/encoder/layer_1/attention/self/query/kernel', 
-       'bert/transformer_1/attention_layer_1/query/bias:0':'bert/encoder/layer_1/attention/self/query/bias',
-       'bert/transformer_1/attention_layer_1/key/kernel:0':'bert/encoder/layer_1/attention/self/key/kernel',
-       'bert/transformer_1/attention_layer_1/key/bias:0':'bert/encoder/layer_1/attention/self/key/bias',
-       'bert/transformer_1/attention_layer_1/value/kernel:0':'bert/encoder/layer_1/attention/self/value/kernel',
-       'bert/transformer_1/attention_layer_1/value/bias:0':'bert/encoder/layer_1/attention/self/value/bias',
-        #...
-       'bert/transformer_1/dense0/kernel:0':'bert/encoder/layer_1/attention/output/dense/kernel',
-       'bert/transformer_1/dense0/bias:0':'bert/encoder/layer_1/attention/output/dense/bias',
-       'bert/transformer_1/layer_normalization_3/gamma:0':'bert/encoder/layer_1/attention/output/LayerNorm/gamma',
-       'bert/transformer_1/layer_normalization_3/beta:0':'bert/encoder/layer_1/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_1/dense/kernel:0':'bert/encoder/layer_1/intermediate/dense/kernel',#未使用
-       'bert/transformer_1/dense/bias:0':'bert/encoder/layer_1/intermediate/dense/bias',#未使用
-        #...
-       'bert/transformer_1/dense1/kernel:0':'bert/encoder/layer_1/output/dense/kernel',#未使用
-       'bert/transformer_1/dense1/bias:0':'bert/encoder/layer_1/output/dense/bias',
-       'bert/transformer_1/layer_normalization_4/gamma:0':'bert/encoder/layer_1/output/LayerNorm/gamma',
-       'bert/transformer_1/layer_normalization_4/beta:0':'bert/encoder/layer_1/output/LayerNorm/beta', 
-        #...
-        #3
-       'bert/transformer_2/attention_layer_2/query/kernel:0':'bert/encoder/layer_2/attention/self/query/kernel',
-       'bert/transformer_2/attention_layer_2/query/bias:0':'bert/encoder/layer_2/attention/self/query/bias',
-       'bert/transformer_2/attention_layer_2/key/kernel:0':'bert/encoder/layer_2/attention/self/key/kernel',
-       'bert/transformer_2/attention_layer_2/key/bias:0':'bert/encoder/layer_2/attention/self/key/bias',
-       'bert/transformer_2/attention_layer_2/value/kernel:0':'bert/encoder/layer_2/attention/self/value/kernel',
-       'bert/transformer_2/attention_layer_2/value/bias:0':'bert/encoder/layer_2/attention/self/value/bias',
-        #...
-       'bert/transformer_2/dense0/kernel:0':'bert/encoder/layer_2/attention/output/dense/kernel',
-       'bert/transformer_2/dense0/bias:0':'bert/encoder/layer_2/attention/output/dense/bias',
-       'bert/transformer_2/layer_normalization_5/gamma:0':'bert/encoder/layer_2/attention/output/LayerNorm/gamma',
-       'bert/transformer_2/layer_normalization_5/beta:0':'bert/encoder/layer_2/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_2/dense/kernel:0':'bert/encoder/layer_2/intermediate/dense/kernel',
-       'bert/transformer_2/dense/bias:0':'bert/encoder/layer_2/intermediate/dense/bias',
-        #...
-       'bert/transformer_2/dense1/kernel:0':'bert/encoder/layer_2/output/dense/kernel',
-       'bert/transformer_2/dense1/bias:0':'bert/encoder/layer_2/output/dense/bias',
-       'bert/transformer_2/layer_normalization_6/gamma:0':'bert/encoder/layer_2/output/LayerNorm/gamma',
-       'bert/transformer_2/layer_normalization_6/beta:0':'bert/encoder/layer_2/output/LayerNorm/beta',
-        #...
-        #4
-       'bert/transformer_3/attention_layer_3/query/kernel:0':'bert/encoder/layer_3/attention/self/query/kernel',
-       'bert/transformer_3/attention_layer_3/query/bias:0':'bert/encoder/layer_3/attention/self/query/bias',
-       'bert/transformer_3/attention_layer_3/key/kernel:0':'bert/encoder/layer_3/attention/self/key/kernel',
-       'bert/transformer_3/attention_layer_3/key/bias:0':'bert/encoder/layer_3/attention/self/key/bias',
-       'bert/transformer_3/attention_layer_3/value/kernel:0':'bert/encoder/layer_3/attention/self/value/kernel',
-       'bert/transformer_3/attention_layer_3/value/bias:0':'bert/encoder/layer_3/attention/self/value/bias',
-        #...
-       'bert/transformer_3/dense0/kernel:0':'bert/encoder/layer_3/attention/output/dense/kernel',
-       'bert/transformer_3/dense0/bias:0':'bert/encoder/layer_3/attention/output/dense/bias',
-       'bert/transformer_3/layer_normalization_7/gamma:0':'bert/encoder/layer_3/attention/output/LayerNorm/gamma',
-       'bert/transformer_3/layer_normalization_7/beta:0':'bert/encoder/layer_3/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_3/dense/kernel:0':'bert/encoder/layer_3/intermediate/dense/kernel',
-       'bert/transformer_3/dense/bias:0':'bert/encoder/layer_3/intermediate/dense/bias',
-        #...
-       'bert/transformer_3/dense1/kernel:0':'bert/encoder/layer_3/output/dense/kernel',
-       'bert/transformer_3/dense1/bias:0':'bert/encoder/layer_3/output/dense/bias',
-       'bert/transformer_3/layer_normalization_8/gamma:0':'bert/encoder/layer_3/output/LayerNorm/gamma',
-       'bert/transformer_3/layer_normalization_8/beta:0':'bert/encoder/layer_3/output/LayerNorm/beta',
-        #...
-        #5
-       'bert/transformer_4/attention_layer_4/query/kernel:0':'bert/encoder/layer_4/attention/self/query/kernel',
-       'bert/transformer_4/attention_layer_4/query/bias:0':'bert/encoder/layer_4/attention/self/query/bias',
-       'bert/transformer_4/attention_layer_4/key/kernel:0':'bert/encoder/layer_4/attention/self/key/kernel',
-       'bert/transformer_4/attention_layer_4/key/bias:0':'bert/encoder/layer_4/attention/self/key/bias',
-       'bert/transformer_4/attention_layer_4/value/kernel:0':'bert/encoder/layer_4/attention/self/value/kernel',
-       'bert/transformer_4/attention_layer_4/value/bias:0':'bert/encoder/layer_4/attention/self/value/bias',
-        #...
-       'bert/transformer_4/dense0/kernel:0':'bert/encoder/layer_4/attention/output/dense/kernel',
-       'bert/transformer_4/dense0/bias:0':'bert/encoder/layer_4/attention/output/dense/bias',
-       'bert/transformer_4/layer_normalization_9/gamma:0':'bert/encoder/layer_4/attention/output/LayerNorm/gamma',
-       'bert/transformer_4/layer_normalization_9/beta:0':'bert/encoder/layer_4/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_4/dense/kernel:0':'bert/encoder/layer_4/intermediate/dense/kernel',
-       'bert/transformer_4/dense/bias:0':'bert/encoder/layer_4/intermediate/dense/bias',
-        #...
-       'bert/transformer_4/dense1/kernel:0':'bert/encoder/layer_4/output/dense/kernel',
-       'bert/transformer_4/dense1/bias:0':'bert/encoder/layer_4/output/dense/bias',
-       'bert/transformer_4/layer_normalization_10/gamma:0':'bert/encoder/layer_4/output/LayerNorm/gamma',
-       'bert/transformer_4/layer_normalization_10/beta:0':'bert/encoder/layer_4/output/LayerNorm/beta',
-        #...
-        #6
-       'bert/transformer_5/attention_layer_5/query/kernel:0':'bert/encoder/layer_5/attention/self/query/kernel',
-       'bert/transformer_5/attention_layer_5/query/bias:0':'bert/encoder/layer_5/attention/self/query/bias',
-       'bert/transformer_5/attention_layer_5/key/kernel:0':'bert/encoder/layer_5/attention/self/key/kernel',
-       'bert/transformer_5/attention_layer_5/key/bias:0':'bert/encoder/layer_5/attention/self/key/bias',
-       'bert/transformer_5/attention_layer_5/value/kernel:0':'bert/encoder/layer_5/attention/self/value/kernel',
-       'bert/transformer_5/attention_layer_5/value/bias:0':'bert/encoder/layer_5/attention/self/value/bias',
-        #...
-       'bert/transformer_5/dense0/kernel:0':'bert/encoder/layer_5/attention/output/dense/kernel',
-       'bert/transformer_5/dense0/bias:0':'bert/encoder/layer_5/attention/output/dense/bias',
-       'bert/transformer_5/layer_normalization_11/gamma:0':'bert/encoder/layer_5/attention/output/LayerNorm/gamma',
-       'bert/transformer_5/layer_normalization_11/beta:0':'bert/encoder/layer_5/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_5/dense/kernel:0':'bert/encoder/layer_5/intermediate/dense/kernel',
-       'bert/transformer_5/dense/bias:0':'bert/encoder/layer_5/intermediate/dense/bias',
-        #...
-       'bert/transformer_5/dense1/kernel:0':'bert/encoder/layer_5/output/dense/kernel',
-       'bert/transformer_5/dense1/bias:0':'bert/encoder/layer_5/output/dense/bias',
-       'bert/transformer_5/layer_normalization_12/gamma:0':'bert/encoder/layer_5/output/LayerNorm/gamma',
-       'bert/transformer_5/layer_normalization_12/beta:0':'bert/encoder/layer_5/output/LayerNorm/beta',
-        #...
-        #7
-       'bert/transformer_6/attention_layer_6/query/kernel:0':'bert/encoder/layer_6/attention/self/query/kernel',
-       'bert/transformer_6/attention_layer_6/query/bias:0':'bert/encoder/layer_6/attention/self/query/bias',
-       'bert/transformer_6/attention_layer_6/key/kernel:0':'bert/encoder/layer_6/attention/self/key/kernel',
-       'bert/transformer_6/attention_layer_6/key/bias:0':'bert/encoder/layer_6/attention/self/key/bias',
-       'bert/transformer_6/attention_layer_6/value/kernel:0':'bert/encoder/layer_6/attention/self/value/kernel',
-       'bert/transformer_6/attention_layer_6/value/bias:0':'bert/encoder/layer_6/attention/self/value/bias',
-        #...
-       'bert/transformer_6/dense0/kernel:0':'bert/encoder/layer_6/attention/output/dense/kernel',
-       'bert/transformer_6/dense0/bias:0':'bert/encoder/layer_6/attention/output/dense/bias',
-       'bert/transformer_6/layer_normalization_13/gamma:0':'bert/encoder/layer_6/attention/output/LayerNorm/gamma',
-       'bert/transformer_6/layer_normalization_13/beta:0':'bert/encoder/layer_6/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_6/dense/kernel:0':'bert/encoder/layer_6/intermediate/dense/kernel',
-       'bert/transformer_6/dense/bias:0':'bert/encoder/layer_6/intermediate/dense/bias',
-        #...
-       'bert/transformer_6/dense1/kernel:0':'bert/encoder/layer_6/output/dense/kernel',
-       'bert/transformer_6/dense1/bias:0':'bert/encoder/layer_6/output/dense/bias',
-       'bert/transformer_6/layer_normalization_14/gamma:0':'bert/encoder/layer_6/output/LayerNorm/gamma',
-       'bert/transformer_6/layer_normalization_14/beta:0':'bert/encoder/layer_6/output/LayerNorm/beta',
-        #...
-        #8
-       'bert/transformer_7/attention_layer_7/query/kernel:0':'bert/encoder/layer_7/attention/self/query/kernel',
-       'bert/transformer_7/attention_layer_7/query/bias:0':'bert/encoder/layer_7/attention/self/query/bias',
-       'bert/transformer_7/attention_layer_7/key/kernel:0':'bert/encoder/layer_7/attention/self/key/kernel',
-       'bert/transformer_7/attention_layer_7/key/bias:0':'bert/encoder/layer_7/attention/self/key/bias',
-       'bert/transformer_7/attention_layer_7/value/kernel:0':'bert/encoder/layer_7/attention/self/value/kernel',
-       'bert/transformer_7/attention_layer_7/value/bias:0':'bert/encoder/layer_7/attention/self/value/bias',
-        #...
-       'bert/transformer_7/dense0/kernel:0':'bert/encoder/layer_7/attention/output/dense/kernel',
-       'bert/transformer_7/dense0/bias:0':'bert/encoder/layer_7/attention/output/dense/bias',
-       'bert/transformer_7/layer_normalization_15/gamma:0':'bert/encoder/layer_7/attention/output/LayerNorm/gamma',
-       'bert/transformer_7/layer_normalization_15/beta:0':'bert/encoder/layer_7/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_7/dense/kernel:0':'bert/encoder/layer_7/intermediate/dense/kernel',
-       'bert/transformer_7/dense/bias:0':'bert/encoder/layer_7/intermediate/dense/bias',
-        #...
-       'bert/transformer_7/dense1/kernel:0':'bert/encoder/layer_7/output/dense/kernel',
-       'bert/transformer_7/dense1/bias:0':'bert/encoder/layer_7/output/dense/bias',
-       'bert/transformer_7/layer_normalization_16/gamma:0':'bert/encoder/layer_7/output/LayerNorm/gamma',
-       'bert/transformer_7/layer_normalization_16/beta:0':'bert/encoder/layer_7/output/LayerNorm/beta',
-        #...
-        #9
-       'bert/transformer_8/attention_layer_8/query/kernel:0':'bert/encoder/layer_8/attention/self/query/kernel',
-       'bert/transformer_8/attention_layer_8/query/bias:0':'bert/encoder/layer_8/attention/self/query/bias',
-       'bert/transformer_8/attention_layer_8/key/kernel:0':'bert/encoder/layer_8/attention/self/key/kernel',
-       'bert/transformer_8/attention_layer_8/key/bias:0':'bert/encoder/layer_8/attention/self/key/bias',
-       'bert/transformer_8/attention_layer_8/value/kernel:0':'bert/encoder/layer_8/attention/self/value/kernel',
-       'bert/transformer_8/attention_layer_8/value/bias:0':'bert/encoder/layer_8/attention/self/value/bias',
-        #...
-       'bert/transformer_8/dense0/kernel:0':'bert/encoder/layer_8/attention/output/dense/kernel',
-       'bert/transformer_8/dense0/bias:0':'bert/encoder/layer_8/attention/output/dense/bias',
-       'bert/transformer_8/layer_normalization_17/gamma:0':'bert/encoder/layer_8/attention/output/LayerNorm/gamma',
-       'bert/transformer_8/layer_normalization_17/beta:0':'bert/encoder/layer_8/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_8/dense/kernel:0':'bert/encoder/layer_8/intermediate/dense/kernel',
-       'bert/transformer_8/dense/bias:0':'bert/encoder/layer_8/intermediate/dense/bias',
-        #...
-       'bert/transformer_8/dense1/kernel:0':'bert/encoder/layer_8/output/dense/kernel',
-       'bert/transformer_8/dense1/bias:0':'bert/encoder/layer_8/output/dense/bias',
-       'bert/transformer_8/layer_normalization_18/gamma:0':'bert/encoder/layer_8/output/LayerNorm/gamma',
-       'bert/transformer_8/layer_normalization_18/beta:0':'bert/encoder/layer_8/output/LayerNorm/beta',
-        #...
-        #10
-       'bert/transformer_9/attention_layer_9/query/kernel:0':'bert/encoder/layer_9/attention/self/query/kernel',
-       'bert/transformer_9/attention_layer_9/query/bias:0':'bert/encoder/layer_9/attention/self/query/bias',
-       'bert/transformer_9/attention_layer_9/key/kernel:0':'bert/encoder/layer_9/attention/self/key/kernel',
-       'bert/transformer_9/attention_layer_9/key/bias:0':'bert/encoder/layer_9/attention/self/key/bias',
-       'bert/transformer_9/attention_layer_9/value/kernel:0':'bert/encoder/layer_9/attention/self/value/kernel',
-       'bert/transformer_9/attention_layer_9/value/bias:0':'bert/encoder/layer_9/attention/self/value/bias',
-        #...
-       'bert/transformer_9/dense0/kernel:0':'bert/encoder/layer_9/attention/output/dense/kernel',
-       'bert/transformer_9/dense0/bias:0':'bert/encoder/layer_9/attention/output/dense/bias',
-       'bert/transformer_9/layer_normalization_19/gamma:0':'bert/encoder/layer_9/attention/output/LayerNorm/gamma',
-       'bert/transformer_9/layer_normalization_19/beta:0':'bert/encoder/layer_9/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_9/dense/kernel:0':'bert/encoder/layer_9/intermediate/dense/kernel',
-       'bert/transformer_9/dense/bias:0':'bert/encoder/layer_9/intermediate/dense/bias',
-        #...
-       'bert/transformer_9/dense1/kernel:0':'bert/encoder/layer_9/output/dense/kernel',
-       'bert/transformer_9/dense1/bias:0':'bert/encoder/layer_9/output/dense/bias',
-       'bert/transformer_9/layer_normalization_20/gamma:0':'bert/encoder/layer_9/output/LayerNorm/gamma',
-       'bert/transformer_9/layer_normalization_20/beta:0':'bert/encoder/layer_9/output/LayerNorm/beta',
-        #11
-       'bert/transformer_10/attention_layer_10/query/kernel:0':'bert/encoder/layer_10/attention/self/query/kernel',
-       'bert/transformer_10/attention_layer_10/query/bias:0':'bert/encoder/layer_10/attention/self/query/bias',
-       'bert/transformer_10/attention_layer_10/key/kernel:0':'bert/encoder/layer_10/attention/self/key/kernel',
-       'bert/transformer_10/attention_layer_10/key/bias:0':'bert/encoder/layer_10/attention/self/key/bias',
-       'bert/transformer_10/attention_layer_10/value/kernel:0':'bert/encoder/layer_10/attention/self/value/kernel',
-       'bert/transformer_10/attention_layer_10/value/bias:0':'bert/encoder/layer_10/attention/self/value/bias',
-        #...
-       'bert/transformer_10/dense0/kernel:0':'bert/encoder/layer_10/attention/output/dense/kernel',
-       'bert/transformer_10/dense0/bias:0':'bert/encoder/layer_10/attention/output/dense/bias',
-       'bert/transformer_10/layer_normalization_21/gamma:0':'bert/encoder/layer_10/attention/output/LayerNorm/gamma',
-       'bert/transformer_10/layer_normalization_21/beta:0':'bert/encoder/layer_10/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_10/dense/kernel:0':'bert/encoder/layer_10/intermediate/dense/kernel',
-       'bert/transformer_10/dense/bias:0':'bert/encoder/layer_10/intermediate/dense/bias',
-        #...
-       'bert/transformer_10/dense1/kernel:0':'bert/encoder/layer_10/output/dense/kernel',
-       'bert/transformer_10/dense1/bias:0':'bert/encoder/layer_10/output/dense/bias',
-       'bert/transformer_10/layer_normalization_22/gamma:0':'bert/encoder/layer_10/output/LayerNorm/gamma',
-       'bert/transformer_10/layer_normalization_22/beta:0':'bert/encoder/layer_10/output/LayerNorm/beta', 
-        #12
-       'bert/transformer_11/attention_layer_11/query/kernel:0':'bert/encoder/layer_11/attention/self/query/kernel',
-       'bert/transformer_11/attention_layer_11/query/bias:0':'bert/encoder/layer_11/attention/self/query/bias',
-       'bert/transformer_11/attention_layer_11/key/kernel:0':'bert/encoder/layer_11/attention/self/key/kernel',
-       'bert/transformer_11/attention_layer_11/key/bias:0':'bert/encoder/layer_11/attention/self/key/bias',
-       'bert/transformer_11/attention_layer_11/value/kernel:0':'bert/encoder/layer_11/attention/self/value/kernel',
-       'bert/transformer_11/attention_layer_11/value/bias:0':'bert/encoder/layer_11/attention/self/value/bias',
-        #...
-       'bert/transformer_11/dense0/kernel:0':'bert/encoder/layer_11/attention/output/dense/kernel',
-       'bert/transformer_11/dense0/bias:0':'bert/encoder/layer_11/attention/output/dense/bias',
-       'bert/transformer_11/layer_normalization_23/gamma:0':'bert/encoder/layer_11/attention/output/LayerNorm/gamma',
-       'bert/transformer_11/layer_normalization_23/beta:0':'bert/encoder/layer_11/attention/output/LayerNorm/beta',
-        #...
-       'bert/transformer_11/dense/kernel:0':'bert/encoder/layer_11/intermediate/dense/kernel',
-       'bert/transformer_11/dense/bias:0':'bert/encoder/layer_11/intermediate/dense/bias',
-        #...
-       'bert/transformer_11/dense1/kernel:0':'bert/encoder/layer_11/output/dense/kernel',
-       'bert/transformer_11/dense1/bias:0':'bert/encoder/layer_11/output/dense/bias',
-       'bert/transformer_11/layer_normalization_24/gamma:0':'bert/encoder/layer_11/output/LayerNorm/gamma',
-       'bert/transformer_11/layer_normalization_24/beta:0':'bert/encoder/layer_11/output/LayerNorm/beta'
-    }
+transformer_dicts = {
+'bert/embeddings/position_embeddings/embeddings:0':'bert/embeddings/position_embeddings',
+'bert/embeddings/word_embeddings/embeddings:0':'bert/embeddings/word_embeddings',
+'bert/embeddings/segment_embeddings/embeddings:0':'bert/embeddings/token_type_embeddings',
+'bert/embeddings/layer_normalization/gamma:0':'bert/embeddings/LayerNorm/gamma',
+'bert/embeddings/layer_normalization/beta:0':'bert/embeddings/LayerNorm/beta',
+}
+for layer_ndx in range(bert.num_layers):
+print('layer_ndx = ')
+print(layer_ndx)
+transformer_dicts.update({
+    'bert/transformer_%d/attention/query/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/query/kernel'%(layer_ndx),
+    #注意中间有冒号，两边要分开进行赋值
+    'bert/transformer_%d/attention/query/bias:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/query/bias'%(layer_ndx),
+    'bert/transformer_%d/attention/key/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/key/kernel'%(layer_ndx),
+    'bert/transformer_%d/attention/key/bias:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/key/bias'%(layer_ndx),
+    'bert/transformer_%d/attention/value/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/value/kernel'%(layer_ndx),
+    'bert/transformer_%d/attention/value/bias:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/value/bias'%(layer_ndx),
+
+    'bert/transformer_%d/dense0/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/attention/output/dense/kernel'%(layer_ndx),
+    'bert/transformer_%d/dense0/bias:0'%(layer_ndx):'bert/encoder/layer_%d/attention/output/dense/bias'%(layer_ndx),
+    'bert/transformer_%d/layer_normalization_0/gamma:0'%(layer_ndx):'bert/encoder/layer_%d/attention/output/LayerNorm/gamma'%(layer_ndx),
+    'bert/transformer_%d/layer_normalization_0/beta:0'%(layer_ndx):'bert/encoder/layer_%d/attention/output/LayerNorm/beta'%(layer_ndx),
+
+    'bert/transformer_%d/dense/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/intermediate/dense/kernel'%(layer_ndx),
+    'bert/transformer_%d/dense/bias:0'%(layer_ndx):'bert/encoder/layer_%d/intermediate/dense/bias'%(layer_ndx),
+
+    'bert/transformer_%d/dense1/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/output/dense/kernel'%(layer_ndx),
+    'bert/transformer_%d/dense1/bias:0'%(layer_ndx):'bert/encoder/layer_%d/output/dense/bias'%(layer_ndx),
+    'bert/transformer_%d/layer_normalization_1/gamma:0'%(layer_ndx):'bert/encoder/layer_%d/output/LayerNorm/gamma'%(layer_ndx),
+    'bert/transformer_%d/layer_normalization_1/beta:0'%(layer_ndx):'bert/encoder/layer_%d/output/LayerNorm/beta'%(layer_ndx)
+
+})
 ```
 
 遍历现在的权重参数，以元组形式放入对应的set()之中
@@ -488,3 +272,5 @@ for ndx,(param_value,param) in enumerate(zip(param_values,bert_params)):
 ```python
 keras.backend.batch_set_value(weight_value_tuples)
 ```
+
+2021年3月31号：更新了loader之中的权重定义
