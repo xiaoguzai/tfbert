@@ -303,3 +303,100 @@ inputs = [1,2,3,4,5]
 outputs = model(inputs)
 ```
 观察模型对应的输出情况
+**2021年4月2日：更新了example.py的内容，解决了输入的keras.Input中的batch_size和max_len与最终输入数据中的batch_size和max_len维度不同造成的结果无法收敛的情形**
+即之前的
+```python
+input_ids      = keras.layers.Input(shape=(max_seq_len,), dtype='int32', name="input_ids")
+```
+**上面Input之中的max_seq_len = 128**
+和最终输入的
+```python
+model.fit(x=train_x, y=train_y,
+          validation_split=0.1,
+          batch_size=batch_size,
+          shuffle=True,
+          epochs=total_epoch_count,
+          callbacks=[create_learning_rate_scheduler(max_learn_rate=1e-5,
+                                                    end_learn_rate=1e-7,
+                                                    warmup_epoch_count=5,
+                                                    total_epoch_count=total_epoch_count),
+                     keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True),
+                     #EarlyStopping用于提前停止训练的callbacks,可以达到当训练集上的loss
+                     #不再减小(即减小的程度小于某个阀值)的时候停止继续训练
+                     #patience:能够容忍多少个epoch内都没有improvement
+                     tensorboard_callback])
+```
+中的np.array(x).shape中的max_len维度不同造成的不能很好地收敛的情况
+**上面Input之中的max_seq_len = 178**
+维度不同的时候对应的结果不能够很好的收敛，
+而当调整维度相同之后对应的结果：
+```
+Epoch 1/10
+
+Epoch 00001: LearningRateScheduler reducing learning rate to 5e-06.
+WARNING:tensorflow:Gradients do not exist for variables ['bert/embeddings/segment_embeddings/embeddings:0'] when minimizing the loss.
+WARNING:tensorflow:Gradients do not exist for variables ['bert/embeddings/segment_embeddings/embeddings:0'] when minimizing the loss.
+48/48 [==============================] - 28s 493ms/step - loss: 0.7870 - acc: 0.5460 - val_loss: 0.5164 - val_acc: 0.8281
+Epoch 2/10
+
+Epoch 00002: LearningRateScheduler reducing learning rate to 1e-05.
+48/48 [==============================] - 22s 462ms/step - loss: 0.4543 - acc: 0.7780 - val_loss: 0.3099 - val_acc: 0.8516
+Epoch 3/10
+
+Epoch 00003: LearningRateScheduler reducing learning rate to 1.5000000000000002e-05.
+48/48 [==============================] - 23s 471ms/step - loss: 0.2313 - acc: 0.9099 - val_loss: 0.3257 - val_acc: 0.8828
+Epoch 4/10
+
+Epoch 00004: LearningRateScheduler reducing learning rate to 2e-05.
+48/48 [==============================] - 23s 473ms/step - loss: 0.1546 - acc: 0.9376 - val_loss: 0.3409 - val_acc: 0.9023
+Epoch 5/10
+
+Epoch 00005: LearningRateScheduler reducing learning rate to 2.5e-05.
+48/48 [==============================] - 23s 478ms/step - loss: 0.0807 - acc: 0.9756 - val_loss: 0.4122 - val_acc: 0.9062
+Epoch 6/10
+
+Epoch 00006: LearningRateScheduler reducing learning rate to 3.0000000000000004e-05.
+48/48 [==============================] - 23s 475ms/step - loss: 0.0261 - acc: 0.9892 - val_loss: 0.5326 - val_acc: 0.8906
+Epoch 7/10
+
+Epoch 00007: LearningRateScheduler reducing learning rate to 3.5000000000000004e-05.
+48/48 [==============================] - 23s 479ms/step - loss: 0.0201 - acc: 0.9917 - val_loss: 0.5701 - val_acc: 0.8828
+Epoch 8/10
+
+Epoch 00008: LearningRateScheduler reducing learning rate to 4e-05.
+48/48 [==============================] - 23s 477ms/step - loss: 0.0541 - acc: 0.9814 - val_loss: 0.5465 - val_acc: 0.8945
+Epoch 9/10
+
+Epoch 00009: LearningRateScheduler reducing learning rate to 4.5e-05.
+48/48 [==============================] - 23s 478ms/step - loss: 0.0245 - acc: 0.9922 - val_loss: 0.5279 - val_acc: 0.8945
+Epoch 10/10
+
+Epoch 00010: LearningRateScheduler reducing learning rate to 5e-05.
+48/48 [==============================] - 23s 478ms/step - loss: 0.0295 - acc: 0.9918 - val_loss: 0.7450 - val_acc: 0.8789
+```
+可以看出调整max_seq_len维度相同之后模型能够很好地收敛
+**另外一个就是如果你是从config之中读取对应的参数的时候，需要注意如果加入batch_size的话，你的batch_size要与最终输入的batch_size数值一致**
+```python
+with open(bert_config_file) as f:
+    config = json.load(f)
+config['batch_size'] = 48
+print(config)
+```
+与模型训练中的
+```python
+model.fit(x=train_x, y=train_y,
+          validation_split=0.1,
+          batch_size=batch_size,
+          shuffle=True,
+          epochs=total_epoch_count,
+          callbacks=[create_learning_rate_scheduler(max_learn_rate=1e-5,
+                                                    end_learn_rate=1e-7,
+                                                    warmup_epoch_count=5,
+                                                    total_epoch_count=total_epoch_count),
+                     keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True),
+                     #EarlyStopping用于提前停止训练的callbacks,可以达到当训练集上的loss
+                     #不再减小(即减小的程度小于某个阀值)的时候停止继续训练
+                     #patience:能够容忍多少个epoch内都没有improvement
+                     tensorboard_callback])
+```
+内容保持一致
