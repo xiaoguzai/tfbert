@@ -297,3 +297,9 @@ self.dense = keras.layers.Dense(units = self.intermediate_size,
 				name = "dense")
 ```
 **intermediate层之中加入了激活函数，发现对于深度学习收敛过程帮助很大**
+使用的调试小技巧类似于
+```python
+inputs = [1,2,3,4,5]
+outputs = model(inputs)
+```
+观察模型对应的输出情况
