@@ -73,7 +73,7 @@ def _prepare(df):
             tokens = tokenizer.tokenize(text)
             tokens = ["[CLS]"] + tokens + ["[SEP]"]
             token_ids = tokenizer.convert_tokens_to_ids(tokens)
-            max_seq_len = max(max_seq_len, len(token_ids))
+            #max_seq_len = max(max_seq_len,len(token_ids)-2)
             x.append(token_ids)
             y.append(int(label))
             pbar.update()
@@ -96,7 +96,7 @@ def _pad(ids):
 import models
 from models import Bert
 from models import Embeddings
-batch_size = 24
+batch_size = 48
 bertmodel = Bert(maxlen=max_seq_len,batch_size=batch_size)
 
 
@@ -137,20 +137,21 @@ def create_learning_rate_scheduler(max_learn_rate=5e-5,
             res = max_learn_rate*math.exp(math.log(end_learn_rate/max_learn_rate)*(epoch-warmup_epoch_count+1)/(total_epoch_count-warmup_epoch_count+1))
         return float(res)
     learning_rate_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_scheduler, verbose=1)
-
+    #keras.callbacks.LearningRateScheduler(schedule,verbose=0)
+    #schedule:接受epoch作为输入(整数，从0开始迭代)，然后返回一个学习率作为输出(浮点数)
+    #verbose:0:安静,1:更新信息
     return learning_rate_scheduler
 
 import datetime
 log_dir = ".log/movie_reviews/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%s")
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir)
+#keras.callbacks.
 
-total_epoch_count = 10
-print('train_x = ')
-print(np.array(train_x).shape)
+total_epoch_count = 30
 #train_x = (2560,178)
 model.fit(x=train_x, y=train_y,
           validation_split=0.1,
-          batch_size=24,
+          batch_size=batch_size,
           shuffle=True,
           epochs=total_epoch_count,
           callbacks=[create_learning_rate_scheduler(max_learn_rate=1e-5,
@@ -158,7 +159,12 @@ model.fit(x=train_x, y=train_y,
                                                     warmup_epoch_count=5,
                                                     total_epoch_count=total_epoch_count),
                      keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True),
+                     #EarlyStopping用于提前停止训练的callbacks,可以达到当训练集上的loss
+                     #不再减小(即减小的程度小于某个阀值)的时候停止继续训练
+                     #patience:能够容忍多少个epoch内都没有improvement
                      tensorboard_callback])
+          #create_learning_rate_scheduler指定的是学习率，根据warmup_epoch_count热身部分
+          #和正常部分进行学习率的指定
 model.save_weights('./movie_reviews.h5', overwrite=True)
 
 
