@@ -15,30 +15,31 @@ class  Bert(tf.keras.layers.Layer):
                 embedding_size=768,#4
                 project_embeddings_with_bias=True,#5
                 vocab_size=30522,#6
-                use_token_type=True,#7
-                use_position_embeddings=True,#8
-                token_type_vocab_size=2,#9
                 hidden_dropout=0.1,#10
                 extra_tokens_vocab_size=None,#11
                 project_position_embeddings=True,#12
                 mask_zero=False,#13
                 adapter_size=None,#14
-                adapter_activation='gelu',#15
+                hidden_act='gelu',#15
                 adapter_init_scale=0.001,#16
-                num_heads=12,#17
+                num_attention_heads=12,#17
                 size_per_head=None,#18
-                query_activation=None,#19
-                key_activation=None,#20
-                value_activation=None,#21
-                attention_dropout=0.1,#22
+                attention_probs_dropout_prob=0.1,#22
                 negative_infinity=-10000.0,#23
                 intermediate_size=3072,#24
                 intermediate_activation='gelu',#25
                 num_layers=12,#26
-                out_layer_ndxs=None,#27
-                shared_layer=False,#28
                 batch_size = 256,
                 #获取对应的切分分割字符内容
+                directionality = 'bidi',
+                pooler_fc_size = 768,
+                pooler_num_attention_heads = 12,
+                pooler_num_fc_layers = 3,
+                pooler_size_per_head = 128,
+                pooler_type = "first_token_transform",
+                type_vocab_size = 2,
+                with_mlm = False,
+                mlm_activation = 'softmax',
                 *args, **kwargs):
         #这里初步先将所有的参数都放入__init__之中
         #后期可以将不需要更改的参数放入build函数之中
@@ -53,27 +54,31 @@ class  Bert(tf.keras.layers.Layer):
         self.embedding_size = embedding_size#4
         self.project_embeddings_with_bias = project_embeddings_with_bias#5
         self.vocab_size = vocab_size#6
-        self.use_token_type = use_token_type#7
-        self.use_position_embeddings = use_position_embeddings#8
-        self.token_type_vocab_size = token_type_vocab_size#9
+        self.token_type_vocab_size = 2#9
         self.hidden_dropout = hidden_dropout#10
         self.extra_tokens_vocab_size = extra_tokens_vocab_size#11
         self.project_position_embeddingFs = project_position_embeddings#12
         self.mask_zero = mask_zero#13
         self.adapter_size = adapter_size#14
-        self.adapter_activation = adapter_activation#15
+        self.hidden_act = hidden_act#15
         self.adapter_init_scale = adapter_init_scale#16
-        self.num_heads = num_heads#17注意力头数，需指定
-        assert embedding_size%num_heads == 0,"size_per_head必须能够整除num_heads"
-        self.size_per_head = embedding_size//num_heads#18
-        self.attention_dropout = attention_dropout#22
+        self.num_attention_heads = num_attention_heads#17注意力头数，需指定
+        assert embedding_size%num_attention_heads == 0,"size_per_head必须能够整除num_attention_heads"
+        self.size_per_head = embedding_size//num_attention_heads#18
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob#22
         self.negative_infinity = negative_infinity#23
         self.intermediate_size = intermediate_size#24
         self.intermediate_activation = intermediate_activation#25
         self.num_layers = num_layers#26 attention层数，需指定
-        self.out_layer_ndxs = out_layer_ndxs#27
-        self.shared_layer = shared_layer#28
         self.batch_size = batch_size#最大批次，需指定
+        self.directionality = directionality
+        self.pooler_fc_size = pooler_fc_size
+        self.pooler_num_attention_heads = pooler_num_attention_heads
+        self.pooler_num_fc_layers = pooler_num_fc_layers
+        self.pooler_size_per_head = pooler_size_per_head
+        self.pooler_type = pooler_type
+        self.with_mlm = with_mlm
+        self.mlm_activation = mlm_activation
 
     def build(self, input_ids):
         #加一个是否len为2的判断
@@ -93,15 +98,30 @@ class  Bert(tf.keras.layers.Layer):
         self.encoder_layer = []
         for layer_ndx in range(self.num_layers):
             encoder_layer = Transformer(initializer_range = self.initializer_range,
-                                           num_heads = self.num_heads,
+                                           num_attention_heads = self.num_attention_heads,
                                            size_per_head = self.size_per_head,
-                                           attention_dropout = 0.1,
+                                           attention_probs_dropout_prob = 0.1,
                                            negative_infinity = -10000.0,
                                            intermediate_size = self.intermediate_size
                                           )
             encoder_layer.name = 'transformer_%d'%layer_ndx
             self.encoder_layer.append(encoder_layer)
+        if self.with_mlm:
+            self.mlm_dense0 = keras.layers.Dense(units = self.embedding_size,
+                                        kernel_initializer = self.create_initializer(),
+                                        name = "mlm_dense0")
+            self.mlm_norm = LayerNormalization()
+            self.mlm_norm.name = 'mlm_norm'
+            self.mlm_dense1 = keras.layers.Dense(units = self.vocab_size,
+                                        kernel_initializer = self.create_initializer(),
+                                        name = "mlm_dense1")
+            #这里使用add_weight作为bias进行操作
+            #self.mlm_activation_layer = keras.layers.Activation(self.mlm_activation)
         super(Bert, self).build(input_ids)
+    
+    def create_initializer(self):
+        return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
+    
     def call(self,input_ids):
         judge1 = tf.is_tensor(input_ids)
         judge2 = True if type(input_ids) is np.ndarray else False
@@ -109,9 +129,19 @@ class  Bert(tf.keras.layers.Layer):
         assert judge1 or judge2 or judge3, "Expecting input to be a tensor or numpy or list type"
         output_embeddings = self.embeddings(input_ids)
         #这里定义为多个transformer的内容
+        #output_embeddings = [1,7,768]
+        #到output_embeddings部分输出相同
         for encoder_layer in self.encoder_layer:
             output_embeddings = encoder_layer(output_embeddings)
-        return output_embeddings
+        outputs = output_embeddings
+        if self.with_mlm:
+            outputs = self.mlm_dense0(outputs)
+            outputs = self.mlm_norm(outputs)
+            outputs = self.mlm_dense1(outputs)
+            print(tf.transpose(outputs,[0,2,1]))
+            if self.mlm_activation == 'softmax':
+                outputs = keras.activations.softmax(outputs,axis=-1)
+        return outputs
         
 class  Embeddings(tf.keras.layers.Layer):
     #实现word_embedding,segment_embedding,position_embedding的相加求和结果
@@ -183,6 +213,8 @@ class  Embeddings(tf.keras.layers.Layer):
             assert 2 == len(input_ids),"Expecting inputs to be a [input_ids,token_type_ids] list"
             input_ids,segment_ids = input_ids[0],input_ids[1]
         shape = input_ids.shape
+        #print('shape = ')
+        #print(shape)
         maxlen = shape[1]
         batch_size = shape[0]
         #input_ids = tf.convert_to_tensor(input_ids)
@@ -192,6 +224,7 @@ class  Embeddings(tf.keras.layers.Layer):
             position_embeddings = tf.slice(self.position_embeddings_table,
                                                 [0,0],
                                                 [maxlen,-1])
+        
         #这里的max_position_embeddings使用切片技术实现的
         #从position_embedding_table之中切出对应的maxlen长度的数据
         currentshape = [1,maxlen,self.embedding_size]
@@ -208,7 +241,7 @@ class  Embeddings(tf.keras.layers.Layer):
         #[7,8,9],[10,11,12]]
         #tf.concat(1,[t1,t2]) = [[1,2,3,7,8,9],[4,5,6,10,11,12]]
         results = word_embeddings+tf.reshape(position_embeddings,currentshape)
-        results = results+segment_embeddings
+        #results = results+segment_embeddings
         results = self.layer_normalization(results)
         results = self.dropout_layer(results)
         return results
@@ -220,14 +253,14 @@ class  Transformer(tf.keras.layers.Layer):
                  embedding_size = 768,
                  hidden_dropout = 0.1,
                  adapter_size = None,
-                 adapter_activation = 'gelu',
+                 hidden_act = 'gelu',
                  adapter_init_scale = 0.001,
-                 num_heads = 12,
+                 num_attention_heads = 12,
                  size_per_head = 64,
                  query_activation = None,
                  key_activation = None,
                  value_activation = None,
-                 attention_dropout = 0.1,
+                 attention_probs_dropout_prob = 0.1,
                  negative_infinity = -10000.0,
                  intermediate_size = 3072,
                  **kwargs):
@@ -236,24 +269,24 @@ class  Transformer(tf.keras.layers.Layer):
         self.embedding_size = embedding_size
         self.hidden_dropout = hidden_dropout
         self.adapter_size = adapter_size
-        self.adapter_activation = adapter_activation
+        self.hidden_act = hidden_act
         self.adapter_init_scale = adapter_init_scale
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.size_per_head = size_per_head
         self.query_activation = query_activation
         self.key_activation = key_activation
         self.value_activation = value_activation
-        self.attention_dropout = attention_dropout
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.negative_infinity = negative_infinity
         self.intermediate_size = intermediate_size
     def build(self,input_shape):
         self.attention = AttentionLayer(initializer_range = self.initializer_range,
-                                        num_heads = self.num_heads,
+                                        num_attention_heads = self.num_attention_heads,
                                         size_per_head = self.size_per_head,
                                         query_activation = self.query_activation,
                                         key_activation = self.key_activation,
                                         value_activation = self.value_activation,
-                                        attention_dropout = self.attention_dropout,
+                                        attention_probs_dropout_prob = self.attention_probs_dropout_prob,
                                         negative_infinity = self.negative_infinity,
                                         name = "attention")
         self.dense0 = keras.layers.Dense(units = self.embedding_size,
@@ -265,7 +298,9 @@ class  Transformer(tf.keras.layers.Layer):
         #自己定义的keras.layers层定义名称之后，名称赋值并不能赋值上
         self.dense = keras.layers.Dense(units = self.intermediate_size,
                                         kernel_initializer = self.create_initializer(),
+                                        activation = self.get_activation('gelu'),
                                         name = "dense")
+        #错误点1：这里的activation少加了一个激活的gelu函数
         self.dense1 = keras.layers.Dense(units = self.embedding_size,
                                         kernel_initializer = self.create_initializer(),
                                         name = "dense1")
@@ -275,16 +310,32 @@ class  Transformer(tf.keras.layers.Layer):
         super(Transformer,self).build(input_shape)
                                          
     def call(self,inputs,**kwargs):
+        #print('Transformer call')
+        residual = inputs
         embedding_output = self.attention(inputs)
-        #注意看transformer结构图，这里是经过attention机制之后
-        #再进行相应的残差连接
-        residual = embedding_output
+        #transformer结构图中确实是residual inputs在attention之前
+        #然而这里进行分类任务的时候实测residual inputs在attention之后效果更好
+        #residual = inputs
+        #print('embedding_output1 = ')
+        #print(embedding_output)
         embedding_output = self.dense0(embedding_output)
+        #print('after dense')
+        #print('embedding_output = ')
+        #print(embedding_output)
         embedding_output = self.dropout0(embedding_output)
+        #print('after dropout')
+        #print('embedding_output = ')
+        #print(embedding_output)
         embedding_output = self.layer_norm0(residual+embedding_output)
+        #print('after layer_norm0')
+        #print('embedding_output = ')
+        #print(embedding_output)
         residual = embedding_output
         embedding_output = self.dense(embedding_output)
         #self.dense对应着feed forward层
+        #print('after intermediate dense')
+        #print('embedding_output = ')
+        #print(embedding_output)
         embedding_output = self.dense1(embedding_output)
         embedding_output = self.dropout1(embedding_output)
         embedding_output = self.layer_norm1(residual+embedding_output)
@@ -293,26 +344,56 @@ class  Transformer(tf.keras.layers.Layer):
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
 
+    def gelu(self,x):
+        """
+        Gelu activation from arXiv:1606.08415.
+        """
+        cdf = 0.5 * (1.0 + tf.tanh(
+            np.sqrt(2.0 / np.pi) * (x + 0.044715 * tf.pow(x, 3))
+        ))
+        return x * cdf
+
+    def gelu_exact(self,x):
+        return x * tf.math.erfc(-x / tf.sqrt(2.)) / 2.
+
+    def get_activation(self,activation_string):
+        if not isinstance(activation_string, str):
+            return activation_string
+
+        act = activation_string.lower()
+        if act == "linear":
+            return None
+        elif act == "relu":
+            return tf.nn.relu
+        elif act == "gelu":
+            return self.gelu
+        elif act == "gelu_exact":
+            return self.gelu_exact
+        elif act == "tanh":
+            return tf.tanh
+        else:
+            raise ValueError("Unsupported activation: %s" % act)
+
 class AttentionLayer(tf.keras.layers.Layer):
     name = 'attention'
     def __init__(self,
                  initializer_range = 0.02,
-                 num_heads = 12,
+                 num_attention_heads = 12,
                  size_per_head = 64,
                  query_activation = None,
                  key_activation = None,
                  value_activation = None,
-                 attention_dropout = 0.1,
+                 attention_probs_dropout_prob = 0.1,
                  negative_infinity = -10000.0,
                  **kwargs):
         super(AttentionLayer,self).__init__()
         self.initializer_range = initializer_range
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.size_per_head = size_per_head
         self.query_activation = query_activation
         self.key_activation = key_activation
         self.value_activation = value_activation
-        self.attention_dropout = attention_dropout
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.negative_infinity = negative_infinity
         
         self.query_layer = None
@@ -328,7 +409,7 @@ class AttentionLayer(tf.keras.layers.Layer):
     def build(self,input_shape):
         self.input_spec = keras.layers.InputSpec(shape=input_shape)
         #build之中可以通过input_spec来定义对应新的keras.layers.InputSpec
-        dense_units = self.num_heads*self.size_per_head
+        dense_units = self.num_attention_heads*self.size_per_head
         #768=12*64,12头，每一头64个维度
         self.query_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
                                               kernel_initializer=self.create_initializer(),
@@ -339,22 +420,22 @@ class AttentionLayer(tf.keras.layers.Layer):
         self.value_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
                                               kernel_initializer=self.create_initializer(),
                                               name="value")
-        self.dropout_layer = keras.layers.Dropout(self.attention_dropout)
+        self.dropout_layer = keras.layers.Dropout(self.attention_probs_dropout_prob)
         super(AttentionLayer,self).build(input_shape)
 
     def compute_output_shape(self,input_shape):
         from_shape = input_shape
-        output_shape = [from_shape[0],from_shape[1],self.num_heads*self.size_per_head]
+        output_shape = [from_shape[0],from_shape[1],self.num_attention_heads*self.size_per_head]
         return output_shape
         
     def call(self,inputs,**kwargs):
         input_shape = tf.shape(input=inputs)
         batch_size,seq_len,width = input_shape[0],input_shape[1],input_shape[2]
         def transpose_for_scores(input_tensor,seq_len):
-        #改变数组形状，由[batch_size,from_seq_len,num_heads*size_per_head]
-        #->[batch_size,num_heads,from_seq_len,size_per_head]
+        #改变数组形状，由[batch_size,from_seq_len,num_attention_heads*size_per_head]
+        #->[batch_size,num_attention_heads,from_seq_len,size_per_head]
             output_shape = [batch_size,seq_len,
-                           self.num_heads,self.size_per_head]
+                           self.num_attention_heads,self.size_per_head]
             #input_tensor = ("bert/transformer/attention_layer/query/
             #BiasAdd:0",shape=(None,128,768))
             #output_shape = [None,128,12,64]
@@ -363,6 +444,7 @@ class AttentionLayer(tf.keras.layers.Layer):
             #小函数能够使用外面的变量
             #注意这里的output_shape必须放入tensor类型的数值
             return tf.transpose(a=output_tensor,perm=[0,2,1,3])
+        #attention inputs = (1,7,768)
         query = self.query_layer(inputs)
         #query = (None,128,768)
         key = self.key_layer(inputs)
@@ -380,7 +462,7 @@ class AttentionLayer(tf.keras.layers.Layer):
         attention_probs = tf.nn.softmax(attention_scores)
         #value = (None,12,None,64)
         value = tf.reshape(value,[batch_size,seq_len,
-                                  self.num_heads,self.size_per_head])
+                                  self.num_attention_heads,self.size_per_head])
         value = tf.transpose(a=value,perm=[0,2,1,3])
         #value = (None,12,None,64)
         context_layer = tf.matmul(attention_probs,value)
@@ -391,7 +473,7 @@ class AttentionLayer(tf.keras.layers.Layer):
         #(None,64,12,128)
         #context_layer = (None,12,None,64)
         output_shape = [batch_size,seq_len,
-                       self.num_heads*self.size_per_head]
+                       self.num_attention_heads*self.size_per_head]
         #output_shape = [None,None,12,64]
         context_layer = tf.reshape(context_layer,output_shape)
         #context_layer = (None,128,12,64)
