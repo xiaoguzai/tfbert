@@ -289,3 +289,10 @@ predictions权重用于句子的预测，pooler池化层也是用于nsp等任务
 
 ## 更新内容
 2021年3月31号：更新了loader之中的权重定义，以及对应的segment_ids有输入和没有输入的不同的实现
+**2021年4月2号：更新了intermediate layer之中的定义**
+```
+self.dense = keras.layers.Dense(units = self.intermediate_size,
+				kernel_initializer = self.create_initializer(),
+				activation = self.get_activation('gelu'),
+				name = "dense")
+```
