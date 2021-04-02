@@ -296,3 +296,4 @@ self.dense = keras.layers.Dense(units = self.intermediate_size,
 				activation = self.get_activation('gelu'),
 				name = "dense")
 ```
+**intermediate层之中加入了激活函数，发现对于深度学习收敛过程帮助很大**
