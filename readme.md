@@ -401,3 +401,40 @@ model.fit(x=train_x, y=train_y,
                      tensorboard_callback])
 ```
 内容保持一致
+**2021年4月3日：加入了bert之中采用mlm进行采样的操作过程**
+
+具体添加的网络层采样代码如下
+```python
+if self.with_mlm:
+    self.mlm_dense0 = keras.layers.Dense(units = self.embedding_size,
+				kernel_initializer = self.create_initializer(),
+				name = "mlm_dense0")
+    self.mlm_norm = LayerNormalization()
+    self.mlm_norm.name = 'mlm_norm'
+    self.mlm_dense1 = keras.layers.Dense(units = self.vocab_size,
+				kernel_initializer = self.create_initializer(),
+				name = "mlm_dense1")
+```
+可以看出这里先添加了一个dense层，再添加了一个归一化层，最后再添加了一个dense层内容
+```python
+if self.with_mlm:
+    outputs = self.mlm_dense0(outputs)
+    outputs = self.mlm_norm(outputs)
+    outputs = self.mlm_dense1(outputs)
+```
+对应添加的权重加载过程如下：
+```python
+'bert/mlm_dense0/kernel:0':'cls/predictions/transform/dense/kernel',
+'bert/mlm_dense0/bias:0':'cls/predictions/transform/dense/bias',
+'bert/mlm_norm/gamma:0':'cls/predictions/transform/LayerNorm/gamma',
+'bert/mlm_norm/beta:0':'cls/predictions/transform/LayerNorm/beta',
+'bert/mlm_dense1/kernel:0':'bert/embeddings/word_embeddings',
+'bert/mlm_dense1/bias:0':'cls/predictions/output_bias'
+```
+第一个dense层使用了'cls/predictions/transform/dense/kernel'以及'cls/predictions/transform/dense/bias'的权重
+(None,128,768)
+第二个layernormalization使用了'cls/predictions/transform/LayerNorm/gamma'以及'cls/predictions/transform/LayerNorm/beta'的权重
+(None,128,768)
+第三个dense层使用了word_embedding权重的转置(21128,768)->(768,21128)
+(None,128,768)乘(768,21128) = (None,128,21128)
+最后取出第1句第i个单词的每一个单词表中的概率(0,i)->(21128,),然后从中随机抽样出单词的概率
