@@ -10,8 +10,8 @@ setup(
     author='xiaoguzai',
     author_email='474551240@qq.com',
     license='apache2.0',
-    url='http://github.com/liangdongchang/django-xadmin',
-    download_url='http://github.com/liangdongchang/django-xadmin/master.zip',
+    url='https://github.com/boss2020/tfbert',
+    download_url='https://github.com/boss2020/tfbert/master.zip',
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
