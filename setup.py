@@ -1,15 +1,21 @@
-#! -*- coding: utf-8 -*-
-
+#!/usr/bin/env python
+from io import open
 from setuptools import setup, find_packages
 
 setup(
-    name='tfbert',
+    name='tf2bert',
     version='1.0.0',
-    description='a simple bert for beginner',
-    long_description='tfbert:https://github.com/boss2020/tf2bert',
-    url='https://github.com/boss2020/tf2bert',
+    description='a package for your bert using',
+    long_description='使用keras实现你的bert项目',
     author='xiaoguzai',
     author_email='474551240@qq.com',
-    install_requires=['tensorflow>=2.0'],
-    packages=find_packages()
+    license='apache2.0',
+    url='http://github.com/liangdongchang/django-xadmin',
+    download_url='http://github.com/liangdongchang/django-xadmin/master.zip',
+    packages=find_packages(),
+    include_package_data=True,
+    install_requires=[
+        'setuptools',
+        'tensorflow'>=2.4.0
+    ]
 )
