@@ -432,9 +432,9 @@ if self.with_mlm:
 'bert/mlm_dense1/bias:0':'cls/predictions/output_bias'
 ```
 第一个dense层使用了'cls/predictions/transform/dense/kernel'以及'cls/predictions/transform/dense/bias'的权重
-(None,128,768)
+(None,128,768)，
 第二个layernormalization使用了'cls/predictions/transform/LayerNorm/gamma'以及'cls/predictions/transform/LayerNorm/beta'的权重
-(None,128,768)
+(None,128,768)，
 第三个dense层使用了word_embedding权重的转置(21128,768)->(768,21128)
 (None,128,768)乘(768,21128) = (None,128,21128)
 最后取出第1句第i个单词的每一个单词表中的概率(0,i)->(21128,),然后从中随机抽样出单词的概率
