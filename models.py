@@ -414,10 +414,10 @@ class AttentionLayer(tf.keras.layers.Layer):
         self.query_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
                                               kernel_initializer=self.create_initializer(),
                                               name="query")
-        self.key_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
+        self.key_layer = keras.layers.Dense(units=dense_units,activation=self.key_activation,
                                               kernel_initializer=self.create_initializer(),
                                               name="key")
-        self.value_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
+        self.value_layer = keras.layers.Dense(units=dense_units,activation=self.value_activation,
                                               kernel_initializer=self.create_initializer(),
                                               name="value")
         self.dropout_layer = keras.layers.Dropout(self.attention_probs_dropout_prob)
