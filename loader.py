@@ -22,7 +22,13 @@ def load_stock_weights(bert: Bert, ckpt_path):
     #                              "Please add the layer in a Keras model and call model.build() first!"
     ckpt_reader = tf.train.load_checkpoint(ckpt_path)
     stock_weights = set(ckpt_reader.get_variable_to_dtype_map().keys())
+    #stock_weights为从文件中读取的对应关键值名称
     bert_params = bert.weights
+    bertmodelname = []
+    for data in bert.weights:
+        bertmodelname.append(data.name)
+    print('bertmodelname = ')
+    print(bertmodelname)
     param_values = keras.backend.batch_get_value(bert.weights)
     #之前使用param相当于重新定义了一个属性param属性，然后通过param属性去查找相应的
     #适配其他类型的权重实际上就是修改对应的参数名称，让它能够跟新的权重内容匹配上
@@ -34,8 +40,6 @@ def load_stock_weights(bert: Bert, ckpt_path):
        'bert/embeddings/layer_normalization/beta:0':'bert/embeddings/LayerNorm/beta',
     }
     for layer_ndx in range(bert.num_layers):
-        print('layer_ndx = ')
-        print(layer_ndx)
         transformer_dicts.update({
             'bert/transformer_%d/attention/query/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/attention/self/query/kernel'%(layer_ndx),
             #注意中间有冒号，两边要分开进行赋值
@@ -56,8 +60,14 @@ def load_stock_weights(bert: Bert, ckpt_path):
             'bert/transformer_%d/dense1/kernel:0'%(layer_ndx):'bert/encoder/layer_%d/output/dense/kernel'%(layer_ndx),
             'bert/transformer_%d/dense1/bias:0'%(layer_ndx):'bert/encoder/layer_%d/output/dense/bias'%(layer_ndx),
             'bert/transformer_%d/layer_normalization_1/gamma:0'%(layer_ndx):'bert/encoder/layer_%d/output/LayerNorm/gamma'%(layer_ndx),
-            'bert/transformer_%d/layer_normalization_1/beta:0'%(layer_ndx):'bert/encoder/layer_%d/output/LayerNorm/beta'%(layer_ndx)
+            'bert/transformer_%d/layer_normalization_1/beta:0'%(layer_ndx):'bert/encoder/layer_%d/output/LayerNorm/beta'%(layer_ndx),
             
+            'bert/mlm_dense0/kernel:0':'cls/predictions/transform/dense/kernel',
+            'bert/mlm_dense0/bias:0':'cls/predictions/transform/dense/bias',
+            'bert/mlm_dense1/kernel:0':'bert/embeddings/word_embeddings',
+            'bert/mlm_dense1/bias:0':'cls/predictions/output_bias',
+            'bert/mlm_norm/gamma:0':'cls/predictions/transform/LayerNorm/beta',
+            'bert/mlm_norm/beta:0':'cls/predictions/transform/LayerNorm/beta'
         })
     weight_value_tuples = []
     loaded_weights = set()
@@ -69,6 +79,8 @@ def load_stock_weights(bert: Bert, ckpt_path):
         stock_name = transformer_dicts[param.name]
         if ckpt_reader.has_tensor(stock_name):
             ckpt_value = ckpt_reader.get_tensor(stock_name)
+            if param.name == 'bert/mlm_dense1/kernel:0':
+                ckpt_value = ckpt_value.transpose()
             if param_value.shape != ckpt_value.shape:
                 print("loader: Skipping weight:[{}] as the weight shape:[{}] is not compatible "
                       "with the checkpoint:[{}] shape:{}".format(param.name, param.shape,
