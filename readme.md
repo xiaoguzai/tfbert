@@ -3,7 +3,7 @@
 pip install bertforyou==1.1.9
 ```
 **下载完后配置完预训练文件以及数据集路径即可运行example文件中的example.py以及mlm+bert采样**
-**一个最简单的例子**
+**一个最简单的例子(无需配置预训练文件)**
 ```python
 import models
 from models import Bert
