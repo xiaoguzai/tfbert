@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 from tqdm import tqdm
-bert_ckpt_dir="/home/xiaoguzai/origin-code/uncased_L-12_H-768_A-12/"
+bert_ckpt_dir="/home/xiaoguzai/下载/chinese_L-12_H-768_A-12/"
 bert_ckpt_file = bert_ckpt_dir + "bert_model.ckpt"
 bert_config_file = bert_ckpt_dir + "bert_config.json"
 
@@ -9,7 +9,7 @@ import re
 import pandas as pd
 import numpy as np
 import os
-data = {}
+r"""data = {}
 data["sentence"] = []
 data["sentiment"] = []
 for file_path in tqdm(os.listdir('/home/xiaoguzai/origin-code/aclImdb/train/pos'),desc=os.path.basename('/home/xiaoguzai/origin-code/aclImdb/train/pos')):
@@ -91,12 +91,12 @@ def _pad(ids):
     return np.array(x)#np.array(t)
 ((train_x,train_y),(test_x,test_y)) = map(_prepare,[train,test])
 ((train_x),(test_x)) = map(_pad,[train_x,test_x])
-
-
+"""
 import models
 from models import Bert
 from models import Embeddings
 batch_size = 48
+max_seq_len = 128
 bertmodel = Bert(maxlen=max_seq_len,batch_size=batch_size)
 
 
@@ -120,7 +120,7 @@ model.compile(optimizer=keras.optimizers.Adam(),
 #评价函数和损失函数相似，只不过评价函数的结果不会用于训练过程中
 model.summary()
 
-
+r"""
 from loader import load_stock_weights
 load_stock_weights(bertmodel,bert_ckpt_file)
 
@@ -204,3 +204,4 @@ res = model.predict(pred_token_ids).argmax(axis=-1)
 for text, sentiment in zip(pred_sentences, res):
     print(" text:", text)
     print("  res:", ["negative","positive"][sentiment])
+"""

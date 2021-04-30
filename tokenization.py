@@ -195,10 +195,7 @@ class FullTokenizer(object):
             for sub_token in self.wordpiece_tokenizer.tokenize(token):
             #在BasicTokenizer结果的基础上进行再一次切分，得到子词语(subword),
             #词汇表就是在此时引入的(中文不存在字词，因为中文切分出来都是一个字)
-                #print('sub_token = ')
-                #print(sub_token)
                 split_tokens.append(sub_token)
-                
         return split_tokens
 
     def convert_tokens_to_ids(self, tokens):
@@ -233,9 +230,9 @@ class BasicTokenizer(object):
         # characters in the vocabulary because Wikipedia does have some Chinese
         # words in the English Wikipedia.).
         text = self._tokenize_chinese_chars(text)
-	# 如果是中文的话，每个中文汉字的左右两边都加上空格，(这里只对汉字进行分字，
-	# 不对汉字进行分词)，如果是英文的话不需要进行处理，因为英文词与词之间自身
-	# 带有相应的空格
+    # 如果是中文的话，每个中文汉字的左右两边都加上空格，(这里只对汉字进行分字，
+    # 不对汉字进行分词)，如果是英文的话不需要进行处理，因为英文词与词之间自身
+    # 带有相应的空格
         orig_tokens = whitespace_tokenize(text)
         # whitespace_tokenize的定义在FullTokenizer的上面,将对应的句子使用空格进行分割开
         split_tokens = []

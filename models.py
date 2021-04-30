@@ -109,6 +109,7 @@ class  Bert(tf.keras.layers.Layer):
         if self.with_mlm:
             self.mlm_dense0 = keras.layers.Dense(units = self.embedding_size,
                                         kernel_initializer = self.create_initializer(),
+                                        activation = self.get_activation('gelu'),
                                         name = "mlm_dense0")
             self.mlm_norm = LayerNormalization()
             self.mlm_norm.name = 'mlm_norm'
@@ -122,11 +123,40 @@ class  Bert(tf.keras.layers.Layer):
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
     
+    def get_activation(self,activation_string):
+        if not isinstance(activation_string, str):
+            return activation_string
+
+        act = activation_string.lower()
+        if act == "linear":
+            return None
+        elif act == "relu":
+            return tf.nn.relu
+        elif act == "gelu":
+            return self.gelu
+        elif act == "gelu_exact":
+            return self.gelu_exact
+        elif act == "tanh":
+            return tf.tanh
+        else:
+            raise ValueError("Unsupported activation: %s" % act)
+    
+    def gelu(self,x):
+        """
+        Gelu activation from arXiv:1606.08415.
+        """
+        cdf = 0.5 * (1.0 + tf.tanh(
+            np.sqrt(2.0 / np.pi) * (x + 0.044715 * tf.pow(x, 3))
+        ))
+        return x * cdf
+
+    def gelu_exact(self,x):
+        return x * tf.math.erfc(-x / tf.sqrt(2.)) / 2.
+    
     def call(self,input_ids):
         judge1 = tf.is_tensor(input_ids)
         judge2 = True if type(input_ids) is np.ndarray else False
-        judge3 = True if type(input_ids) is list else False
-        assert judge1 or judge2 or judge3, "Expecting input to be a tensor or numpy or list type"
+        assert judge1 or judge2,"Expecting input to be a tensor or numpy or list type"
         output_embeddings = self.embeddings(input_ids)
         #这里定义为多个transformer的内容
         #output_embeddings = [1,7,768]
@@ -137,10 +167,15 @@ class  Bert(tf.keras.layers.Layer):
         if self.with_mlm:
             outputs = self.mlm_dense0(outputs)
             outputs = self.mlm_norm(outputs)
+            #print('@@@@@@output0 = @@@@@@')
+            #print(outputs)
             outputs = self.mlm_dense1(outputs)
-            print(tf.transpose(outputs,[0,2,1]))
+            #print('------outputs1 = ------')
+            #print(outputs)
             if self.mlm_activation == 'softmax':
                 outputs = keras.activations.softmax(outputs,axis=-1)
+                #print('``````outputs2 = ``````')
+                #print(outputs)
         return outputs
         
 class  Embeddings(tf.keras.layers.Layer):
@@ -166,7 +201,7 @@ class  Embeddings(tf.keras.layers.Layer):
 
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
-        
+
     def build(self, inputs):
         #mask_zero:是否把0看作为一个应该被遮蔽的特殊的padding的值
         #对于可变长的循环神经网络十分有用
@@ -241,6 +276,7 @@ class  Embeddings(tf.keras.layers.Layer):
         #[7,8,9],[10,11,12]]
         #tf.concat(1,[t1,t2]) = [[1,2,3,7,8,9],[4,5,6,10,11,12]]
         results = word_embeddings+tf.reshape(position_embeddings,currentshape)
+        results = results+segment_embeddings
         #results = results+segment_embeddings
         results = self.layer_normalization(results)
         results = self.dropout_layer(results)
@@ -316,12 +352,8 @@ class  Transformer(tf.keras.layers.Layer):
         #transformer结构图中确实是residual inputs在attention之前
         #然而这里进行分类任务的时候实测residual inputs在attention之后效果更好
         #residual = inputs
-        #print('embedding_output1 = ')
-        #print(embedding_output)
         embedding_output = self.dense0(embedding_output)
         #print('after dense')
-        #print('embedding_output = ')
-        #print(embedding_output)
         embedding_output = self.dropout0(embedding_output)
         #print('after dropout')
         #print('embedding_output = ')
@@ -504,6 +536,25 @@ class LayerNormalization(tf.keras.layers.Layer):
             mean, var = tf.nn.moments(x, axes=-1, keepdims=True)
         else:
             mean, var = tf.nn.moments(x, axes=-1, keep_dims=True)
+        outputs = inputs
+        outputs = outputs-mean
+        std = K.sqrt(var+self.epsilon)
+        outputs = outputs/std*self.gamma+self.beta
+        #self.gamma和self.beta没有赋值上去
+        r"""
+        data = K.mean(inputs,axis=-1,keepdims=True)
+        print('data = ')
+        print(inputs-data)
+        print('data1 = ')
+        outputs = inputs-mean
+        print(outputs)
+        print('data2 = ')
+        std = K.sqrt(var+self.epsilon)
+        print(std)
+        print('data3 = ')
+        outputs = outputs/std*self.gamma
+        print(outputs)
+        """
         inv = self.gamma * tf.math.rsqrt(var + self.epsilon)
         res = x * tf.cast(inv, x.dtype) + tf.cast(self.beta - mean * inv, x.dtype)
         #tf.cast()函数执行tensorflow中张量数据类型转换，转换为x.dtype类型

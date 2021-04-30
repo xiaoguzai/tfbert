@@ -3,21 +3,6 @@
 pip install bertforyou==1.1.9
 ```
 **下载完后配置完预训练文件以及数据集路径即可运行example文件中的example.py以及mlm+bert采样**
-**一个最简单的例子(无需配置预训练文件)**
-```python
-import models
-from models import Bert
-from models import Embeddings
-import tensorflow.keras as keras
-max_seq_len = 48
-bertmodel = Bert(maxlen=max_seq_len,batch_size=batch_size)
-input_ids      = keras.layers.Input(shape=(max_seq_len,), dtype='int32', name="input_ids")
-output = bertmodel(input_ids)
-print('output = ')
-print(output)
-```
-！！！读懂这个例子，结合下面的简单说明，就可以明白bert模型的使用原理了！！！
-
 # 小白bert使用说明书
 一个使用keras复现的bert模型库
 之前在看bert源码的时候，发现bert官网上的源码对于新手很不友好，大量的代码和繁杂的英文，都对新手的理解造成了很大的影响，为此本小白制作了一份使用keras复现的bert源代码内容，为了方便新手理解，缩减了所有难以理解的内容，增加了丰富的代码说明和使用指南，并且在原生的bert之上不套用任何bert模型的衍生内容如albert，robert内容等，只为了增加源代码的可读性。
@@ -458,3 +443,15 @@ if self.with_mlm:
 第三个dense层使用了word_embedding权重的转置(21128,768)->(768,21128)
 (None,128,768)乘(768,21128) = (None,128,21128)
 最后取出第1句第i个单词的每一个单词表中的概率(0,i)->(21128,),然后从中随机抽样出单词的概率
+
+**2021.4.30：更新了bert采样的过程，注意mlm中的对应的dense层有一定的微调**
+
+```python
+if self.with_mlm:
+    self.mlm_dense0 = keras.layers.Dense(units = self.embedding_size,
+                                         kernel_initializer = self.create_initializer(),
+                                         activation = self.get_activation('gelu'),
+                                         name = "mlm_dense0")
+```
+
+这里加入了一个对应的'gelu'激活函数的内容

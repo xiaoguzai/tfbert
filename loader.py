@@ -24,12 +24,9 @@ def load_stock_weights(bert: Bert, ckpt_path):
     stock_weights = set(ckpt_reader.get_variable_to_dtype_map().keys())
     #stock_weights为从文件中读取的对应关键值名称
     bert_params = bert.weights
-    r"""bertmodelname = []
+    bertmodelname = []
     for data in bert.weights:
         bertmodelname.append(data.name)
-    print('bertmodelname = ')
-    print(bertmodelname)
-    """
     param_values = keras.backend.batch_get_value(bert.weights)
     #之前使用param相当于重新定义了一个属性param属性，然后通过param属性去查找相应的
     #适配其他类型的权重实际上就是修改对应的参数名称，让它能够跟新的权重内容匹配上
@@ -67,7 +64,7 @@ def load_stock_weights(bert: Bert, ckpt_path):
             'bert/mlm_dense0/bias:0':'cls/predictions/transform/dense/bias',
             'bert/mlm_dense1/kernel:0':'bert/embeddings/word_embeddings',
             'bert/mlm_dense1/bias:0':'cls/predictions/output_bias',
-            'bert/mlm_norm/gamma:0':'cls/predictions/transform/LayerNorm/beta',
+            'bert/mlm_norm/gamma:0':'cls/predictions/transform/LayerNorm/gamma',
             'bert/mlm_norm/beta:0':'cls/predictions/transform/LayerNorm/beta'
         })
     weight_value_tuples = []

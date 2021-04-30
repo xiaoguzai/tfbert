@@ -6,7 +6,7 @@ import json
 import math
 from models import Bert
 import numpy as np
-bert_ckpt_dir="/home/xiaoguzai/下载/chinese_L-12_H-768_A-12/"
+bert_ckpt_dir="/home/xiaoguzai/下载/chinese-base/"
 bert_ckpt_file = bert_ckpt_dir + "bert_model.ckpt"
 bert_config_file = bert_ckpt_dir + "bert_config.json"
 with open(bert_config_file) as f:
@@ -18,9 +18,10 @@ bertmodel = Bert(**config)
 from tokenization import FullTokenizer
 import os
 tokenizer = FullTokenizer(vocab_file=os.path.join(bert_ckpt_dir, "vocab.txt"))
-init_sent = '北京新增3例本地确诊病例和1例无症状感染者'#or None
+init_sent = '科学技术是第一生产力。'#or None
+#init_sent = None
 minlen,maxlen = 8,32
-steps = 100
+steps = 1000
 max_seq_len = 0
 coverged_steps = 1000
 vocab_size = config['vocab_size']
@@ -38,20 +39,23 @@ if init_sent == None:
     token_ids = tokenizer.convert_tokens_to_ids(tokens)
 else:
     tokens = tokenizer.tokenize(init_sent)
+    tokens = ['[CLS]']+tokens+['[SEP]']
     token_ids = tokenizer.convert_tokens_to_ids(tokens)
+    #token_ids = [101, 4906, 2110, 2825, 3318, 3221, 5018, 671, 4495, 772, 1213, 511, 102]
     length = len(token_ids)
     input_ids = keras.layers.Input(shape = (length,),dtype='int32',name='input_ids')
     outputs = bertmodel(input_ids)
     load_stock_weights(bertmodel,bert_ckpt_file)
 sentences = []
 for  _  in  tqdm(range(steps),desc='Sampling'):
-    i = np.random.choice(length)
+    i = np.random.randint(1,length-1,dtype='l')
     token_ids[i] = token_mask_id
     probas = bertmodel(np.array([token_ids]))[0,i]
+    #取出第0行的第i个元素
     probas = np.array(probas)
     probas /= probas.sum()
     token = np.random.choice(vocab_size,p=probas)
     token_ids[i] = token
     sentences.append(''.join(tokenizer.convert_ids_to_tokens(token_ids)))
 print('采样结果为')
-print(sentences)
+print(sentences[100:])
