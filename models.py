@@ -9,12 +9,12 @@ import numpy as np
 class  Bert(tf.keras.layers.Layer):
     name = 'bert'
     def __init__(self,
-                maxlen = 128,#0
                 initializer_range=0.02,#1
                 max_position_embeddings=512,#2
+                maxlen = 128,
                 embedding_size=768,#4
                 project_embeddings_with_bias=True,#5
-                vocab_size=30522,#6
+                vocab_size=21128,#6
                 hidden_dropout=0.1,#10
                 extra_tokens_vocab_size=None,#11
                 project_position_embeddings=True,#12
@@ -29,7 +29,6 @@ class  Bert(tf.keras.layers.Layer):
                 intermediate_size=3072,#24
                 intermediate_activation='gelu',#25
                 num_layers=12,#26
-                batch_size = 256,
                 #获取对应的切分分割字符内容
                 directionality = 'bidi',
                 pooler_fc_size = 768,
@@ -40,6 +39,7 @@ class  Bert(tf.keras.layers.Layer):
                 type_vocab_size = 2,
                 with_mlm = False,
                 mlm_activation = 'softmax',
+                mode = 'bert',
                 *args, **kwargs):
         #这里初步先将所有的参数都放入__init__之中
         #后期可以将不需要更改的参数放入build函数之中
@@ -70,7 +70,6 @@ class  Bert(tf.keras.layers.Layer):
         self.intermediate_size = intermediate_size#24
         self.intermediate_activation = intermediate_activation#25
         self.num_layers = num_layers#26 attention层数，需指定
-        self.batch_size = batch_size#最大批次，需指定
         self.directionality = directionality
         self.pooler_fc_size = pooler_fc_size
         self.pooler_num_attention_heads = pooler_num_attention_heads
@@ -79,6 +78,7 @@ class  Bert(tf.keras.layers.Layer):
         self.pooler_type = pooler_type
         self.with_mlm = with_mlm
         self.mlm_activation = mlm_activation
+        self.mode = mode
 
     def build(self, input_ids):
         #加一个是否len为2的判断
@@ -102,7 +102,8 @@ class  Bert(tf.keras.layers.Layer):
                                            size_per_head = self.size_per_head,
                                            attention_probs_dropout_prob = 0.1,
                                            negative_infinity = -10000.0,
-                                           intermediate_size = self.intermediate_size
+                                           intermediate_size = self.intermediate_size,
+                                           mode = self.mode
                                           )
             encoder_layer.name = 'transformer_%d'%layer_ndx
             self.encoder_layer.append(encoder_layer)
@@ -156,7 +157,8 @@ class  Bert(tf.keras.layers.Layer):
     def call(self,input_ids):
         judge1 = tf.is_tensor(input_ids)
         judge2 = True if type(input_ids) is np.ndarray else False
-        assert judge1 or judge2,"Expecting input to be a tensor or numpy or list type"
+        judge3 = True if isinstance(input_ids,list) else False
+        assert judge1 or judge2 or judge3,"Expecting input to be a tensor or numpy or list type"
         output_embeddings = self.embeddings(input_ids)
         #这里定义为多个transformer的内容
         #output_embeddings = [1,7,768]
@@ -174,8 +176,7 @@ class  Bert(tf.keras.layers.Layer):
             #print(outputs)
             if self.mlm_activation == 'softmax':
                 outputs = keras.activations.softmax(outputs,axis=-1)
-                #print('``````outputs2 = ``````')
-                #print(outputs)
+        #tf.print(outputs)
         return outputs
         
 class  Embeddings(tf.keras.layers.Layer):
@@ -299,6 +300,7 @@ class  Transformer(tf.keras.layers.Layer):
                  attention_probs_dropout_prob = 0.1,
                  negative_infinity = -10000.0,
                  intermediate_size = 3072,
+                 mode = 'bert',
                  **kwargs):
         super(Transformer,self).__init__()
         self.initializer_range = initializer_range
@@ -315,6 +317,7 @@ class  Transformer(tf.keras.layers.Layer):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.negative_infinity = negative_infinity
         self.intermediate_size = intermediate_size
+        self.mode = mode
     def build(self,input_shape):
         self.attention = AttentionLayer(initializer_range = self.initializer_range,
                                         num_attention_heads = self.num_attention_heads,
@@ -324,7 +327,8 @@ class  Transformer(tf.keras.layers.Layer):
                                         value_activation = self.value_activation,
                                         attention_probs_dropout_prob = self.attention_probs_dropout_prob,
                                         negative_infinity = self.negative_infinity,
-                                        name = "attention")
+                                        name = "attention",
+                                        mode = self.mode)
         self.dense0 = keras.layers.Dense(units = self.embedding_size,
                                         kernel_initializer = self.create_initializer(),
                                         name = "dense0")
@@ -417,6 +421,7 @@ class AttentionLayer(tf.keras.layers.Layer):
                  value_activation = None,
                  attention_probs_dropout_prob = 0.1,
                  negative_infinity = -10000.0,
+                 mode = 'bert',
                  **kwargs):
         super(AttentionLayer,self).__init__()
         self.initializer_range = initializer_range
@@ -434,12 +439,12 @@ class AttentionLayer(tf.keras.layers.Layer):
         
         self.supports_masking = True
         self.initializer_range = 0.02
+        self.mode = mode
     
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
     
     def build(self,input_shape):
-        self.input_spec = keras.layers.InputSpec(shape=input_shape)
         #build之中可以通过input_spec来定义对应新的keras.layers.InputSpec
         dense_units = self.num_attention_heads*self.size_per_head
         #768=12*64,12头，每一头64个维度
@@ -460,6 +465,7 @@ class AttentionLayer(tf.keras.layers.Layer):
         output_shape = [from_shape[0],from_shape[1],self.num_attention_heads*self.size_per_head]
         return output_shape
         
+    
     def call(self,inputs,**kwargs):
         input_shape = tf.shape(input=inputs)
         batch_size,seq_len,width = input_shape[0],input_shape[1],input_shape[2]
@@ -523,7 +529,8 @@ class LayerNormalization(tf.keras.layers.Layer):
         self.epsilon = 1e-12
 
     def build(self, input_shape):
-        self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
+        #self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
+        #上面一句会限制模型只能以固定的形状输入
         self.gamma = self.add_weight(name="gamma", shape=input_shape[-1:],
                                      initializer=tf.keras.initializers.Ones(), trainable=True)
         self.beta  = self.add_weight(name="beta", shape=input_shape[-1:],
