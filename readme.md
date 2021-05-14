@@ -458,3 +458,53 @@ if self.with_mlm:
 
 更新了使用掩码遮盖之后反向预测对应词语的过程，对应代码内容在mlm预测遮盖掩码过程.py中
 
+**2021.5.14：去除了限定模型输入的语句，使得不同批次传入的maxlen可以不一样**
+在build函数之中，如果有以下限定输入的语句
+```python
+self.input_spec = keras.layers.InputSpec(shape=input_shape)
+```
+这时候如果先后输入的形状不一样，调用模型的过程中会发生报错，
+比如在AttentionLayer网络层中调用的对应过程
+```python
+class AttentionLayer(tf.keras.layers.Layer):
+    def build(self,input_shape):
+    	self.input_spec = keras.layers.InputSpec(shape=input_shape) 	
+```
+此时如果反复调用的过程中
+```python
+bertmodel = Bert(maxlen=max_seq_len,batch_size=batch_size)
+input_ids = keras.layers.Input(shape=(max_seq_len),dtype='int32')
+output = bertmodel(input_ids)
+from loader import load_stock_weights
+input_ids = keras.layers.Input(shape = (24,),dtype='int32',name="input_ids")
+output = bertmodel(input_ids)
+```
+由于输入的tensor形状不同会发生相应的报错
+```
+ValueError: Input 0 is incompatible with layer attention: expected shape=(None, 128, 768), found shape=(None, 24, 768)
+```
+因为keras.layers.InputSpec限定了模型的输入内容
+将对应的输入限制去除之后，即可放入不同的input_ids
+
+下面为放入不同的最大长度的代码
+```python
+import models
+from models import Bert
+from models import Embeddings
+import tensorflow as tf
+import tensorflow.keras as keras
+bert_ckpt_dir="/home/xiaoguzai/下载/chinese_L-12_H-768_A-12/"
+bert_ckpt_file = bert_ckpt_dir + "bert_model.ckpt"
+bert_config_file = bert_ckpt_dir + "bert_config.json"
+bertmodel = Bert(vocab_size=21128)
+input_ids = keras.layers.Input(shape = (128,),dtype='int32',name="input_ids")
+output = bertmodel(input_ids)
+print('============output1===============')
+print(output)
+from loader import load_stock_weights
+load_stock_weights(bertmodel,bert_ckpt_file)
+input_ids = keras.layers.Input(shape = (24,),dtype='int32',name="input_ids")
+output = bertmodel(input_ids)
+print('============output2===============')
+print(output)
+```
