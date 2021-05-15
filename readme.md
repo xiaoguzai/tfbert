@@ -508,3 +508,33 @@ output = bertmodel(input_ids)
 print('============output2===============')
 print(output)
 ```
+**2020.5.15晚上更新：增加了对于None维度输入的支持**
+修改了一下对于position_embeddings内容的处理
+由原先对于position_embeddings的切分内容处理
+```python
+assert_op = tf.compat.v2.debugging.assert_less_equal(maxlen,self.max_position_embeddings)
+with tf.control_dependencies([assert_op]):
+    position_embeddings = tf.slice(self.position_embeddings_table,
+					[0,0],
+					[maxlen,-1])
+```
+转变为对于从中截取seq_len长度的position_embeddings
+```python
+input_shape = K.shape(input_ids)
+batch_size,seq_len = input_shape[0],input_shape[1]
+position_ids = K.arange(0,seq_len,dtype='int32')[None]
+position_embeddings = self.position_embeddings_table[None,:seq_len]
+```
+这样可以传入批次大小和最大长度都为None的输入
+```python
+import models
+from models import Bert
+from models import Embeddings
+import tensorflow as tf
+import tensorflow.keras as keras
+bertmodel = Bert()
+input_ids = keras.layers.Input(shape = (None,),dtype='int32',name="input_ids")
+output = bertmodel(input_ids)
+print('============output1===============')
+print(output)
+```
