@@ -9,12 +9,12 @@ import numpy as np
 class  Bert(tf.keras.layers.Layer):
     name = 'bert'
     def __init__(self,
+                maxlen = 128,#0
                 initializer_range=0.02,#1
                 max_position_embeddings=512,#2
-                maxlen = 128,
                 embedding_size=768,#4
                 project_embeddings_with_bias=True,#5
-                vocab_size=21128,#6
+                vocab_size=30522,#6
                 hidden_dropout=0.1,#10
                 extra_tokens_vocab_size=None,#11
                 project_position_embeddings=True,#12
@@ -29,6 +29,7 @@ class  Bert(tf.keras.layers.Layer):
                 intermediate_size=3072,#24
                 intermediate_activation='gelu',#25
                 num_layers=12,#26
+                batch_size = 256,
                 #获取对应的切分分割字符内容
                 directionality = 'bidi',
                 pooler_fc_size = 768,
@@ -40,6 +41,7 @@ class  Bert(tf.keras.layers.Layer):
                 with_mlm = False,
                 mlm_activation = 'softmax',
                 mode = 'bert',
+                solution = 'seq2seq',
                 *args, **kwargs):
         #这里初步先将所有的参数都放入__init__之中
         #后期可以将不需要更改的参数放入build函数之中
@@ -70,6 +72,7 @@ class  Bert(tf.keras.layers.Layer):
         self.intermediate_size = intermediate_size#24
         self.intermediate_activation = intermediate_activation#25
         self.num_layers = num_layers#26 attention层数，需指定
+        self.batch_size = batch_size#最大批次，需指定
         self.directionality = directionality
         self.pooler_fc_size = pooler_fc_size
         self.pooler_num_attention_heads = pooler_num_attention_heads
@@ -79,6 +82,7 @@ class  Bert(tf.keras.layers.Layer):
         self.with_mlm = with_mlm
         self.mlm_activation = mlm_activation
         self.mode = mode
+        self.solution = solution
 
     def build(self, input_ids):
         #加一个是否len为2的判断
@@ -96,6 +100,8 @@ class  Bert(tf.keras.layers.Layer):
                                 token_type_vocab_size = self.token_type_vocab_size,
                                 hidden_dropout = self.hidden_dropout)
         self.encoder_layer = []
+        
+        
         for layer_ndx in range(self.num_layers):
             encoder_layer = Transformer(initializer_range = self.initializer_range,
                                            num_attention_heads = self.num_attention_heads,
@@ -103,10 +109,12 @@ class  Bert(tf.keras.layers.Layer):
                                            attention_probs_dropout_prob = 0.1,
                                            negative_infinity = -10000.0,
                                            intermediate_size = self.intermediate_size,
-                                           mode = self.mode
+                                           mode = self.mode,
+                                           solution = self.solution
                                           )
             encoder_layer.name = 'transformer_%d'%layer_ndx
             self.encoder_layer.append(encoder_layer)
+        
         if self.with_mlm:
             self.mlm_dense0 = keras.layers.Dense(units = self.embedding_size,
                                         kernel_initializer = self.create_initializer(),
@@ -160,12 +168,15 @@ class  Bert(tf.keras.layers.Layer):
         judge3 = True if isinstance(input_ids,list) else False
         assert judge1 or judge2 or judge3,"Expecting input to be a tensor or numpy or list type"
         output_embeddings = self.embeddings(input_ids)
-        #这里定义为多个transformer的内容
-        #output_embeddings = [1,7,768]
-        #到output_embeddings部分输出相同
+        #output_embeddings = [(None,128,768),(None,128)]
+        #output_embeddings = [result,segment_embeddings]
+        
+        
         for encoder_layer in self.encoder_layer:
             output_embeddings = encoder_layer(output_embeddings)
-        outputs = output_embeddings
+        
+        outputs = output_embeddings[0]
+        #transformer outputs = (None,128,768)
         if self.with_mlm:
             outputs = self.mlm_dense0(outputs)
             outputs = self.mlm_norm(outputs)
@@ -176,7 +187,8 @@ class  Bert(tf.keras.layers.Layer):
             #print(outputs)
             if self.mlm_activation == 'softmax':
                 outputs = keras.activations.softmax(outputs,axis=-1)
-        #tf.print(outputs)
+                #print('``````outputs2 = ``````')
+                #print(outputs)
         return outputs
         
 class  Embeddings(tf.keras.layers.Layer):
@@ -207,11 +219,15 @@ class  Embeddings(tf.keras.layers.Layer):
         #mask_zero:是否把0看作为一个应该被遮蔽的特殊的padding的值
         #对于可变长的循环神经网络十分有用
         #self.word_embeddings_layer权重矩阵(30522,768)
+        
+        #初始化之后，第二次还会调用build函数吗？？？
+        #哪里导致数组的形状不一致？这里导致每一次的参数都需要传入一次？？？
         if isinstance(inputs,list):
             assert len(inputs) == 2
             input_ids_shape,token_type_ids_shape = inputs
         else:
             input_ids_shape = inputs
+        #input_ids = (None,128),token_type_ids = (None,128)
         maxlen = input_ids_shape[1]
         #build之中的inputs传入的是TensorShape类型的数据内容
         self.word_embeddings_layer = keras.layers.Embedding(
@@ -248,6 +264,7 @@ class  Embeddings(tf.keras.layers.Layer):
         if isinstance(input_ids,list):
             assert 2 == len(input_ids),"Expecting inputs to be a [input_ids,token_type_ids] list"
             input_ids,segment_ids = input_ids[0],input_ids[1]
+        #当为list数组形式的时候可以手动传入对应的segment_ids
         shape = input_ids.shape
         #print('shape = ')
         #print(shape)
@@ -255,11 +272,23 @@ class  Embeddings(tf.keras.layers.Layer):
         batch_size = shape[0]
         #input_ids = tf.convert_to_tensor(input_ids)
         word_embeddings = self.word_embeddings_layer(input_ids)
+        
+        r"""
         assert_op = tf.compat.v2.debugging.assert_less_equal(maxlen,self.max_position_embeddings)
         with tf.control_dependencies([assert_op]):
             position_embeddings = tf.slice(self.position_embeddings_table,
                                                 [0,0],
                                                 [maxlen,-1])
+        """
+        input_shape = K.shape(input_ids)
+        batch_size,seq_len = input_shape[0],input_shape[1]
+        position_ids = K.arange(0,seq_len,dtype='int32')[None]
+        position_embeddings = self.position_embeddings_table[None,:seq_len]
+        #取出对应的position_embeddings内容
+        #position_embeddings = Tensor("bert/embeddings/strided_slice_3:0",shape=(1,None,768),
+        #dtype=float32)
+        #!!!不能使用None作为长度的原因!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #上面的tf.slice会报错
         
         #这里的max_position_embeddings使用切片技术实现的
         #从position_embedding_table之中切出对应的maxlen长度的数据
@@ -276,12 +305,20 @@ class  Embeddings(tf.keras.layers.Layer):
         #t2 = [[7,8,9],[10,11,12]],tf.concat(0,[t1,t2]) = [[1,2,3],[4,5,6]
         #[7,8,9],[10,11,12]]
         #tf.concat(1,[t1,t2]) = [[1,2,3,7,8,9],[4,5,6,10,11,12]]
-        results = word_embeddings+tf.reshape(position_embeddings,currentshape)
+        
+        results = word_embeddings+position_embeddings
+        #results = tf.reshape(position_embeddings,currentshape)
+        
+        
+        #word_embeddings+tf.reshape(position_embeddings,currentshape)
+        #这里报错:required broadcastable shapes at loc(unknown)
         results = results+segment_embeddings
         #results = results+segment_embeddings
         results = self.layer_normalization(results)
         results = self.dropout_layer(results)
-        return results
+        #results = (None,128,768),segment_embeddings = (None,128,768)
+        return [results,segment_ids]
+        #!!!这里只需要segment_ids作为后面的掩码使用，而不需要对应的segment_embeddings
 
 class  Transformer(tf.keras.layers.Layer):
     name = 'transformer'
@@ -301,6 +338,7 @@ class  Transformer(tf.keras.layers.Layer):
                  negative_infinity = -10000.0,
                  intermediate_size = 3072,
                  mode = 'bert',
+                 solution = 'seq2seq',
                  **kwargs):
         super(Transformer,self).__init__()
         self.initializer_range = initializer_range
@@ -318,6 +356,7 @@ class  Transformer(tf.keras.layers.Layer):
         self.negative_infinity = negative_infinity
         self.intermediate_size = intermediate_size
         self.mode = mode
+        self.solution = solution
     def build(self,input_shape):
         self.attention = AttentionLayer(initializer_range = self.initializer_range,
                                         num_attention_heads = self.num_attention_heads,
@@ -328,7 +367,8 @@ class  Transformer(tf.keras.layers.Layer):
                                         attention_probs_dropout_prob = self.attention_probs_dropout_prob,
                                         negative_infinity = self.negative_infinity,
                                         name = "attention",
-                                        mode = self.mode)
+                                        mode = self.mode,
+                                        solution = self.solution)
         self.dense0 = keras.layers.Dense(units = self.embedding_size,
                                         kernel_initializer = self.create_initializer(),
                                         name = "dense0")
@@ -348,10 +388,10 @@ class  Transformer(tf.keras.layers.Layer):
         self.layer_norm1 = LayerNormalization()
         self.layer_norm1.name = "layer_normalization_1"
         super(Transformer,self).build(input_shape)
-                                         
+                                        
     def call(self,inputs,**kwargs):
         #print('Transformer call')
-        residual = inputs
+        residual = inputs[0]
         embedding_output = self.attention(inputs)
         #transformer结构图中确实是residual inputs在attention之前
         #然而这里进行分类任务的时候实测residual inputs在attention之后效果更好
@@ -375,7 +415,7 @@ class  Transformer(tf.keras.layers.Layer):
         embedding_output = self.dense1(embedding_output)
         embedding_output = self.dropout1(embedding_output)
         embedding_output = self.layer_norm1(residual+embedding_output)
-        return embedding_output
+        return [embedding_output,inputs[1]]
 
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
@@ -410,6 +450,8 @@ class  Transformer(tf.keras.layers.Layer):
         else:
             raise ValueError("Unsupported activation: %s" % act)
 
+
+
 class AttentionLayer(tf.keras.layers.Layer):
     name = 'attention'
     def __init__(self,
@@ -422,6 +464,7 @@ class AttentionLayer(tf.keras.layers.Layer):
                  attention_probs_dropout_prob = 0.1,
                  negative_infinity = -10000.0,
                  mode = 'bert',
+                 solution = 'seq2seq',
                  **kwargs):
         super(AttentionLayer,self).__init__()
         self.initializer_range = initializer_range
@@ -440,12 +483,14 @@ class AttentionLayer(tf.keras.layers.Layer):
         self.supports_masking = True
         self.initializer_range = 0.02
         self.mode = mode
+        self.solution = solution
     
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
     
     def build(self,input_shape):
-        #build之中可以通过input_spec来定义对应新的keras.layers.InputSpec
+        if isinstance(input_shape,list):
+            assert 2 == len(input_shape),"Expecting inputs to be a [input_ids,token_type_ids] list"
         dense_units = self.num_attention_heads*self.size_per_head
         #768=12*64,12头，每一头64个维度
         self.query_layer = keras.layers.Dense(units=dense_units,activation=self.query_activation,
@@ -465,9 +510,26 @@ class AttentionLayer(tf.keras.layers.Layer):
         output_shape = [from_shape[0],from_shape[1],self.num_attention_heads*self.size_per_head]
         return output_shape
         
+    def seq2seq_compute_attention_bias(self,s):
+        idxs = K.cumsum(s, axis=1)
+        mask =idxs[:, None, :] <= idxs[:, :, None]
+        mask = K.cast(mask, K.floatx())
+        return -(1-mask) * 1e12
+    
+    def lefttoright_compute_attention_bias(self,s):
+        seq_len = K.shape(s)[1]
+        idxs = K.arange(0, seq_len)
+        mask = idxs[None, :] <= idxs[:, None]
+        mask = K.cast(mask, K.floatx())
+        return -(1-mask) * 1e12
     
     def call(self,inputs,**kwargs):
-        input_shape = tf.shape(input=inputs)
+       #!!!这里报错:Layer attention expects 1 input(s),but it received 2 input tensors
+       #!!!遥想到上面的Embedding放了两个Tensor却没有被报错,所以这段可以仿照上面的Embedding对应
+       #!!!层进行书写相应内容
+       #!!!再回看一下bert4keras如何实现的放入一个数组多个值的操作
+        input_ids,segment_ids = inputs[0],inputs[1]
+        input_shape = tf.shape(input=inputs[0])
         batch_size,seq_len,width = input_shape[0],input_shape[1],input_shape[2]
         def transpose_for_scores(input_tensor,seq_len):
         #改变数组形状，由[batch_size,from_seq_len,num_attention_heads*size_per_head]
@@ -483,30 +545,37 @@ class AttentionLayer(tf.keras.layers.Layer):
             #注意这里的output_shape必须放入tensor类型的数值
             return tf.transpose(a=output_tensor,perm=[0,2,1,3])
         #attention inputs = (1,7,768)
-        query = self.query_layer(inputs)
+        query = self.query_layer(inputs[0])
         #query = (None,128,768)
-        key = self.key_layer(inputs)
-        value = self.value_layer(inputs)
+        key = self.key_layer(inputs[0])
+        value = self.value_layer(inputs[0])
         #query = (None,128,768)
         query = transpose_for_scores(query,seq_len)
         key = transpose_for_scores(key,seq_len)
-        #(None,12,128,64)
+        #(None,12,128,64),batch_size = 128
         #query = (None,12,None,64),key = (None,12,None,64)
         attention_scores = tf.matmul(query,key,transpose_b=True)
-        #(None,12,128,64)*(None,12,64,128) = (None,12,64,64)
+        #(None,12,128,64)*(None,12,64,128) = (None,12,128,128)
+        #实现将批次在矩阵之中提取出来的操作
         attention_scores = attention_scores/tf.sqrt(float(self.size_per_head))
-        #attention_scores = (None,12,None,None)
-        #attention_scores = (32,12,178,178)
+        #attention_scores = (None,12,128,128)
+        if self.mode == 'unilm':
+            if self.solution == 'seq2seq':
+                bias_data = self.seq2seq_compute_attention_bias(segment_ids)
+                #当批次为128的时候，bias_data = (1,128,128)
+                #attention_scores = attention_scores+bias_data[:,None,:,:]
+                attention_scores = attention_scores+bias_data[:,None,:,:]
+                #(5,12,128,128)+(5,128,128) = (5,12,128,128)
+            elif self.solution == 'lefttoright':
+                bias_data = self.lefttoright_compute_attention_bias(segment_ids)
+                attention_scores = attention_scores+bias_data
         attention_probs = tf.nn.softmax(attention_scores)
-        #value = (None,12,None,64)
         value = tf.reshape(value,[batch_size,seq_len,
                                   self.num_attention_heads,self.size_per_head])
         value = tf.transpose(a=value,perm=[0,2,1,3])
-        #value = (None,12,None,64)
+        #value = (5,12,128,64)
         context_layer = tf.matmul(attention_probs,value)
-        #(None,12,None,None)*(None,12,None,64) = (None,12,None,64)
-        #(None,12,64,64)*(None,12,64,128) = (None,12,64,128)
-        #context_layer = (None,12,None,768)
+        #(5,12,128,128)*(5,12,128,64) = (5,12,128,64)
         context_layer = tf.transpose(a=context_layer,perm=[0,2,1,3])
         #(None,64,12,128)
         #context_layer = (None,12,None,64)
@@ -514,8 +583,7 @@ class AttentionLayer(tf.keras.layers.Layer):
                        self.num_attention_heads*self.size_per_head]
         #output_shape = [None,None,12,64]
         context_layer = tf.reshape(context_layer,output_shape)
-        #context_layer = (None,128,12,64)
-        #final_context_layer = (None,None,12,64)
+        #最终转为context_layer = (5,128,12,64)
         return context_layer
 
 class LayerNormalization(tf.keras.layers.Layer):
@@ -529,8 +597,7 @@ class LayerNormalization(tf.keras.layers.Layer):
         self.epsilon = 1e-12
 
     def build(self, input_shape):
-        #self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
-        #上面一句会限制模型只能以固定的形状输入
+        #上面这句去除掉会引发对应的输入错误???
         self.gamma = self.add_weight(name="gamma", shape=input_shape[-1:],
                                      initializer=tf.keras.initializers.Ones(), trainable=True)
         self.beta  = self.add_weight(name="beta", shape=input_shape[-1:],
@@ -548,20 +615,6 @@ class LayerNormalization(tf.keras.layers.Layer):
         std = K.sqrt(var+self.epsilon)
         outputs = outputs/std*self.gamma+self.beta
         #self.gamma和self.beta没有赋值上去
-        r"""
-        data = K.mean(inputs,axis=-1,keepdims=True)
-        print('data = ')
-        print(inputs-data)
-        print('data1 = ')
-        outputs = inputs-mean
-        print(outputs)
-        print('data2 = ')
-        std = K.sqrt(var+self.epsilon)
-        print(std)
-        print('data3 = ')
-        outputs = outputs/std*self.gamma
-        print(outputs)
-        """
         inv = self.gamma * tf.math.rsqrt(var + self.epsilon)
         res = x * tf.cast(inv, x.dtype) + tf.cast(self.beta - mean * inv, x.dtype)
         #tf.cast()函数执行tensorflow中张量数据类型转换，转换为x.dtype类型
