@@ -458,83 +458,87 @@ if self.with_mlm:
 
 更新了使用掩码遮盖之后反向预测对应词语的过程，对应代码内容在mlm预测遮盖掩码过程.py中
 
-**2021.5.14：去除了限定模型输入的语句，使得不同批次传入的maxlen可以不一样**
-在build函数之中，如果有以下限定输入的语句
-```python
-self.input_spec = keras.layers.InputSpec(shape=input_shape)
-```
-这时候如果先后输入的形状不一样，调用模型的过程中会发生报错，
-比如在AttentionLayer网络层中调用的对应过程
-```python
-class AttentionLayer(tf.keras.layers.Layer):
-    def build(self,input_shape):
-    	self.input_spec = keras.layers.InputSpec(shape=input_shape) 	
-```
-此时如果反复调用的过程中
-```python
-bertmodel = Bert(maxlen=max_seq_len,batch_size=batch_size)
-input_ids = keras.layers.Input(shape=(max_seq_len),dtype='int32')
-output = bertmodel(input_ids)
-from loader import load_stock_weights
-input_ids = keras.layers.Input(shape = (24,),dtype='int32',name="input_ids")
-output = bertmodel(input_ids)
-```
-由于输入的tensor形状不同会发生相应的报错
-```
-ValueError: Input 0 is incompatible with layer attention: expected shape=(None, 128, 768), found shape=(None, 24, 768)
-```
-因为keras.layers.InputSpec限定了模型的输入内容
-将对应的输入限制去除之后，即可放入不同的input_ids
+**2021.5.27：更新了bert之中position_embedding内容的实现。**
 
-下面为放入不同的最大长度的代码
+原先bert之中的position_embedding是通过截取权重矩阵实现的
+
+原先部分定义对应的权重矩阵：
+
+build()函数部分的操作
+
 ```python
-import models
-from models import Bert
-from models import Embeddings
-import tensorflow as tf
-import tensorflow.keras as keras
-bert_ckpt_dir="/home/xiaoguzai/下载/chinese_L-12_H-768_A-12/"
-bert_ckpt_file = bert_ckpt_dir + "bert_model.ckpt"
-bert_config_file = bert_ckpt_dir + "bert_config.json"
-bertmodel = Bert(vocab_size=21128)
-input_ids = keras.layers.Input(shape = (128,),dtype='int32',name="input_ids")
-output = bertmodel(input_ids)
-print('============output1===============')
-print(output)
-from loader import load_stock_weights
-load_stock_weights(bertmodel,bert_ckpt_file)
-input_ids = keras.layers.Input(shape = (24,),dtype='int32',name="input_ids")
-output = bertmodel(input_ids)
-print('============output2===============')
-print(output)
+self.position_embeddings_table = self.add_weight(
+    name="position_embeddings/embeddings",
+    dtype=K.floatx(),
+    shape=[self.max_position_embeddings,self.embedding_size],
+    initializer=self.create_initializer()
+)
 ```
-**2020.5.15晚上更新：增加了对于None维度输入的支持**
-修改了一下对于position_embeddings内容的处理
-由原先对于position_embeddings的切分内容处理
+
+在操作的过程之中截取相应的权重
+
+call()函数部分的操作
+
 ```python
-assert_op = tf.compat.v2.debugging.assert_less_equal(maxlen,self.max_position_embeddings)
-with tf.control_dependencies([assert_op]):
-    position_embeddings = tf.slice(self.position_embeddings_table,
-					[0,0],
-					[maxlen,-1])
+position_embeddings = self.position_embeddings_table[None,:seq_len]
+...
+results = word_embeddings+position_embeddings
 ```
-转变为对于从中截取seq_len长度的position_embeddings
+
+此时在训练的时候维度报错如下，看不出来是哪一句代码发生了错误
+
+```
+InvalidArgumentError: 2 root error(s) found.
+  (0) Invalid argument:  required broadcastable shapes at loc(unknown)
+	 [[node model/bert/embeddings/add (defined at /home/xiaoguzai/代码/tfbert-main/models.py:332) ]]
+  (1) Invalid argument:  required broadcastable shapes at loc(unknown)
+	 [[node model/bert/embeddings/add (defined at /home/xiaoguzai/代码/tfbert-main/models.py:332) ]]
+	 [[gradient_tape/model/bert/embeddings/word_embeddings/embedding_lookup/Reshape/_644]]
+0 successful operations.
+0 derived errors ignored. [Op:__inference_train_function_29474]
+```
+
+**但是根据required broadcastable shapes at loc(unknown)以及报错的对应代码语句**
+
 ```python
-input_shape = K.shape(input_ids)
-batch_size,seq_len = input_shape[0],input_shape[1]
-position_ids = K.arange(0,seq_len,dtype='int32')[None]
 position_embeddings = self.position_embeddings_table[None,:seq_len]
 ```
-这样可以传入批次大小和最大长度都为None的输入
+
+我们知道是这里的position_embeddings的形状可能发生了变化
+
+此时这里我们修改一下，使用相应的embedding网络层实现position_embeddings的部分：
+
+build()函数部分的操作：
+
 ```python
-import models
-from models import Bert
-from models import Embeddings
-import tensorflow as tf
-import tensorflow.keras as keras
-bertmodel = Bert()
-input_ids = keras.layers.Input(shape = (None,),dtype='int32',name="input_ids")
-output = bertmodel(input_ids)
-print('============output1===============')
-print(output)
+self.position_embeddings_layer = keras.layers.Embedding(
+	input_dim = self.max_position_embeddings,
+    output_dim = self.embedding_size,
+    mask_zero = self.mask_zero,
+    name = "position_embeddings"
+)
 ```
+
+定义相应的Embedding网络层
+
+在call()函数中的相应的操作：
+
+```python
+position_embeddings = self.position_embeddings_layer(position_ids)
+```
+
+这时候通过报错就能够看出来了
+
+```
+InvalidArgumentError: 2 root error(s) found.
+  (0) Invalid argument:  indices[0,558] = 558 is not in [0, 512)
+	 [[node model/bert/embeddings/position_embeddings/embedding_lookup (defined at /home/xiaoguzai/代码/tfbert-main/models.py:300) ]]
+	 [[model/bert/embeddings/word_embeddings/embedding_lookup/_26]]
+  (1) Invalid argument:  indices[0,558] = 558 is not in [0, 512)
+	 [[node model/bert/embeddings/position_embeddings/embedding_lookup (defined at /home/xiaoguzai/代码/tfbert-main/models.py:300) ]]
+0 successful operations.
+0 derived errors ignored. [Op:__inference_train_function_29522]
+```
+
+也就是说，558超出了最大的position_embedding的512的数值，所以这里会进行相应的报错
+
