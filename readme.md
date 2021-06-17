@@ -542,3 +542,30 @@ InvalidArgumentError: 2 root error(s) found.
 
 也就是说，558超出了最大的position_embedding的512的数值，所以这里会进行相应的报错
 
+**2020.6.17修改中间的gelu激活函数**
+
+原先激活函数的定义为
+
+```python
+def gelu(self,x):
+    """
+        Gelu activation from arXiv:1606.08415.
+        """
+    cdf = 0.5 * (1.0 + tf.tanh(
+        np.sqrt(2.0 / np.pi) * (x + 0.044715 * tf.pow(x, 3))
+    ))
+    return x * cdf
+```
+
+
+
+中间的gelu激活函数可以修改成为另外一种实现方式
+
+```python
+def gelu(self,x):
+    """
+        Gelu activation from arXiv:1606.08415.
+        """
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.sqrt(2.0), x.dtype)))
+    return x * cdf
+```
