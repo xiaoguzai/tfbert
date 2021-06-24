@@ -60,7 +60,7 @@ class  Bert(tf.keras.layers.Layer):
         self.token_type_vocab_size = 2#9
         self.hidden_dropout = hidden_dropout#10
         self.extra_tokens_vocab_size = extra_tokens_vocab_size#11
-        self.project_position_embeddingFs = project_position_embeddings#12
+        self.project_position_embeddings = project_position_embeddings#12
         self.mask_zero = mask_zero#13
         self.adapter_size = adapter_size#14
         self.hidden_act = hidden_act#15
@@ -84,6 +84,46 @@ class  Bert(tf.keras.layers.Layer):
         self.mlm_activation = mlm_activation
         self.mode = mode
         self.solution = solution
+
+    def get_config(self):
+        config = super(Bert,self).get_config()
+        dicts = {
+            "maxlen":self.maxlen,#0,使用过，最大长度，后续会指定，默认为128
+        #回头看看这里的maxlen能否通过读取相应的数组维度内容进行实现
+            "initializer":self.initializer_range,#1
+            "max_position_embeddings":self.max_position_embeddings,#2
+            "embedding_size":self.embedding_size,#4
+            "project_embeddings_with_bias":self.project_embeddings_with_bias,#5
+            "vocab_size":self.vocab_size,#6
+            "token_type_vocab_size":self.token_type_vocab_size,#9
+            "hidden_dropout":self.hidden_dropout,#10
+            "extra_tokens_vocab_size":self.extra_tokens_vocab_size,#11
+            "project_position_embeddings":self.project_position_embeddings,#12
+            "mask_zero":self.mask_zero,#13
+            "adapter_size":self.adapter_size,#14
+            "hidden_act":self.hidden_act,#15
+            "adapter_init_scale":self.adapter_init_scale,#16
+            "num_attention_heads":self.num_attention_heads,#17注意力头数，需指定
+            "size_per_head":self.size_per_head,#18
+            "attention_probas_dropout_prob":self.attention_probs_dropout_prob,#22
+            "negative_infinity":self.negative_infinity,#23
+            "intermediate_size":self.intermediate_size,#24
+            "intermediate_activation":self.intermediate_activation,#25
+            "num_layers":self.num_layers,#26 attention层数，需指定
+            "batch_size":self.batch_size,#最大批次，需指定
+            "directionality":self.directionality,
+            "pooler_fc_size":self.pooler_fc_size,
+            "pooler_num_attention_heads":self.pooler_num_attention_heads,
+            "pooler_num_fc_layers":self.pooler_num_fc_layers,
+            "pooler_size_per_head":self.pooler_size_per_head,
+            "pooler_type":self.pooler_type,
+            "with_mlm":self.with_mlm,
+            "mlm_activation":self.mlm_activation,
+            "mode":self.mode,
+            "solution":self.solution
+        }
+        config.update(dicts)
+        return config
 
     def build(self, input_ids):
         #加一个是否len为2的判断
@@ -211,6 +251,20 @@ class  Embeddings(tf.keras.layers.Layer):
         self.token_type_vocab_size = token_type_vocab_size
         self.initializer_range = initializer_range
         self.hidden_dropout = hidden_dropout
+
+    def get_config(self):
+        config = super(Embeddings,self).get_config()
+        dicts = {
+            "vocab_size":self.vocab_size,
+            "embedding_size":self.embedding_size,
+            "mask_zero":self.mask_zero,
+            "max_position_embeddings":self.max_position_embeddings,
+            "token_type_vocab_size":self.token_type_vocab_size,
+            "initializer_range":self.initializer_range,
+            "hidden_dropout":self.hidden_dropout
+        }
+        config.update(dicts)
+        return config
 
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
@@ -378,6 +432,30 @@ class  Transformer(tf.keras.layers.Layer):
         self.intermediate_size = intermediate_size
         self.mode = mode
         self.solution = solution
+        
+    def get_config(self):
+        config = super(Transformer,self).get_config()
+        dicts = {
+            "initializer_range":self.initializer_range,
+            "embedding_size":self.embedding_size,
+            "hidden_dropout":self.hidden_dropout,
+            "adapter_size":self.adapter_size,
+            "hidden_act":self.hidden_act,
+            "adapter_init_scale":self.adapter_init_scale,
+            "num_attention_heads":self.num_attention_heads,
+            "size_per_head":self.size_per_head,
+            "query_activation":self.query_activation,
+            "key_activation":self.key_activation,
+            "value_activation":self.value_activation,
+            "attention_probs_dropout_prob":self.attention_probs_dropout_prob,
+            "negative_infinity":self.negative_infinity,
+            "intermediate_size":self.intermediate_size,
+            "mode":self.mode,
+            "solution":self.solution
+        }
+        config.update(dicts)
+        return config
+
     def build(self,input_shape):
         self.attention = AttentionLayer(initializer_range = self.initializer_range,
                                         num_attention_heads = self.num_attention_heads,
@@ -506,6 +584,29 @@ class AttentionLayer(tf.keras.layers.Layer):
         self.mode = mode
         self.solution = solution
     
+    def get_config(self):
+        config = super(AttentionLayer,self).get_config()
+        dicts = {
+            "initializer_range":self.initializer_range,
+            "num_attention_heads":self.num_attention_heads,
+            "size_per_head":self.size_per_head,
+            "query_activation":self.query_activation,
+            "key_activation":self.key_activation,
+            "value_activation":self.value_activation,
+            "attention_probs_dropout_prob":self.attention_probas_dropout_prob,
+            "negative_infinity":self.negative_infinity,
+            "query_layer":self.query_layer,
+            "key_layer":self.key_layer,
+            "value_layer":self.value_layer,
+            
+            "supports_masking":self.supports_masking,
+            "initializer_range":self.initializer_range,
+            "mode":self.mode,
+            "solution":self.solution
+        }
+        config.update(dicts)
+        return config
+    
     def create_initializer(self):
         return tf.keras.initializers.TruncatedNormal(stddev=self.initializer_range)
     
@@ -620,7 +721,18 @@ class LayerNormalization(tf.keras.layers.Layer):
         self.beta  = None
         self.supports_masking = True
         self.epsilon = 1e-12
-
+    
+    def get_config(self):
+        config = super(LayerNormalization,self).get_config()
+        dicts = {
+            "gamma":self.gamma,
+            "beta":self.beta,
+            "supports_masking":self.supports_masking,
+            "epsilon":self.epsilon
+        }
+        config.update(dicts)
+        return config
+    
     def build(self, input_shape):
         #上面这句去除掉会引发对应的输入错误???
         self.gamma = self.add_weight(name="gamma", shape=input_shape[-1:],
@@ -822,102 +934,7 @@ class ConditionalRandomField(keras.layers.Layer):
         }
         base_config = super(ConditionalRandomField, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
-r"""
-class CRF(keras.layers.Layer):
-    def __init__(self):
-        super(CRF, self).__init__()
-        self.label_size = None
-        self.seq_lens = None
-        self.trans_params = None
 
-    def build(self,input_shape):
-        print('input_shape = ')
-        print(input_shape)
-        self.label_size = input_shape[-1]
-        self.seq_lens = tf.Tensor([input_shape[0]])
-        #self.trans_params = self.add_weight(
-        #    tf.random.uniform(shape=(self.label_size,self.label_size)))
-        self.trans_params = tf.Variable(
-            tf.random.uniform(shape=(self.label_size, self.label_size)), name="transition")
-        
-    @tf.function
-    def call(self, inputs):
-        return inputs
-    
-    def compute_loss(self,y_true,y_pred):
-        log_likelihood, self.trans_params = crf_log_likelihood(
-                                  inputs = y_pred,tag_indices = y_true,sequence_lengths = self.seq_lens)
-        loss = tf.reduce_sum(-log_likelihood)
-        return loss
-    
-    def sparse_accuracy(self, y_true, y_pred):
-        训练过程中显示逐帧准确率的函数，排除了mask的影响
-        此处y_true需要是整数形式（非one hot）
-        
-        # 导出mask并转换数据类型
-        mask = K.all(K.greater(y_pred, -1e6), axis=2)
-        mask = K.cast(mask, K.floatx())
-        # y_true需要重新明确一下shape和dtype
-        y_true = K.reshape(y_true, K.shape(y_pred)[:-1])
-        y_true = K.cast(y_true, 'int32')
-        # 逐标签取最大来粗略评测训练效果
-        y_pred = K.cast(K.argmax(y_pred, 2), 'int32')
-        isequal = K.cast(K.equal(y_true, y_pred), K.floatx())
-        return K.sum(isequal * mask) / K.sum(mask)
-"""
-r"""
-import tensorflow_addons as tfa
-class CRF(keras.layers.Layer):
-    def __init__(self,target):
-        super(CRF,self).__init__()
-        self.target = target
-    
-    def build(self,input_shape):
-        #self.lens = tf.constant([input_shape[0]])
-        #self.lens = tf.convert_to_tensor([input_shape[0]])
-        #self.lens = tf.Tensor([input_shape[0]],shape=(1,1),dtype=tf.float32三)
-        #sequence_lengths = np.full(input_shape[0],input_shape[1],dtype=np.int32)
-        #sequence_lengths = tf.convert_to_tensor(sequence_lengths)
-        #self.lens = sequence_lengths
-        self.tran_params = self.add_weight(
-            shape = [self.target,self.target],
-            dtype=K.floatx(),
-            initializer = keras.initializers.TruncatedNormal(mean=0.0, stddev=0.02, seed=None)
-        )
-        #self.tran_params = tf.truncated_normal(shape=(target,target),stddev=0.02)
-    
-    def call(self,inputs):
-        #batch_pred_sequence,batch_viterbi_score = tfa.text.crf_decode(inputs,self.tran_params,self.lens)
-        #return batch_pred_sequence
-        return inputs
-    
-    def compute_loss(self,y_true,y_pred):
-        true_shape = y_pred.get_shape().as_list()
-        print('true_shape = ')
-        print(true_shape)
-        sequence_lengths = np.full(true_shape[0],true_shape[1],dtype=np.int32)
-        sequence_lengths = tf.convert_to_tensor(sequence_lengths)
-        self.lens = sequence_lengths
-        log_likelihood,self.trans_params = crf_log_likelihood(
-                                 inputs = y_pred,tag_indices = y_true,sequence_lengths = self.lens)
-        loss = tf.reduce_sum(-log_likelihood)
-        return loss
-    
-    def sparse_accuracy(self, y_true, y_pred):
-        #训练过程中显示逐帧准确率的函数，排除了mask的影响
-        #此处y_true需要是整数形式（非one hot）
-        
-        # 导出mask并转换数据类型
-        mask = K.all(K.greater(y_pred, -1e6), axis=2)
-        mask = K.cast(mask, K.floatx())
-        # y_true需要重新明确一下shape和dtype
-        y_true = K.reshape(y_true, K.shape(y_pred)[:-1])
-        y_true = K.cast(y_true, 'int32')
-        # 逐标签取最大来粗略评测训练效果
-        y_pred = K.cast(K.argmax(y_pred, 2), 'int32')
-        isequal = K.cast(K.equal(y_true, y_pred), K.floatx())
-        return K.sum(isequal * mask) / K.sum(mask)
-"""
 import tensorflow_addons as tfa
 import tensorflow.keras.backend as K
 
